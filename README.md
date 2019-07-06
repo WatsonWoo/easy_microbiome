@@ -1,10 +1,36 @@
 # easy_microbiome
 ## 基于扩增子测序的全套数据处理和分析流程
-做了这么多的扩增子数据分析了，到目前作分析使用的工具在不断更新，选择也越来越大了，所以挑选适合自己的，符合自己思维习惯，分析习惯的工具也就成为了提上日程的问题。
-下面是我的分析习惯所形成的一整套体系：
 
-95%基于R语言的全套扩增子数据处理和下游分析流程。
+# If you notice it carelessly, try it.The following figures are just a few examples
 
-![image](https://note.youdao.com/yws/public/resource/57d6024c2188aff0d6d7486fa656d6de/xmlnote/917BD4C162084AE3B7411660A55FFDFD/10502)
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/1.png?raw=true)
 
-![image2](https://note.youdao.com/yws/public/resource/57d6024c2188aff0d6d7486fa656d6de/xmlnote/732D2B5EFBE94CF58FC7BFBFE74652EE/10492)
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/2.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/3.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/4.png?raw=true)
+
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/5.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/6.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/7.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/9.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/10.png?raw=true)
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/11.png?raw=true)
+
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/12.png?raw=true)
+
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/13.png?raw=true)
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/picture_for_many_of_example/14.png?raw=true)
+
+
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/phyloseq_pipline_5_tax_tree/tax_fal1.png?raw=true)
