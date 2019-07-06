@@ -1,0 +1,396 @@
+---
+title: "phyloseq_DADA2_data_processing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+
+```{r pre, echo=TRUE}
+
+#清空内存#######
+rm(list=ls()) 
+library(dada2); packageVersion("dada2")
+library("phyloseq"); packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")
+#选择下面这种方式注释需要载入包
+# library(DECIPHER); packageVersion("DECIPHER")
+
+```
+# 本文提供原始数据DADA2处理流程。
+
+### 1. 基于R语言的 DADA2 处理流程实战
+Qiime2将dada2进行了封装，这里我们使用的是R语言本尊进行dada2数据流程；本流程提供从原始数据到OTU表格，注释文件，进化树的全套构建过程，并支持一键得到结果。将结果整合为phyloseq的输入；
+官方help文件地址：  本教程相比于官方指导文件，修改了许多内容，如下：
+- 使用big date策略，逐个测序文件分析，使得在即使只有8G的笔记本上也可以轻松跑完超过10G的扩增子样品。
+- 构造并优化追踪文件，使得每个步骤的序列数量清晰呈现。
+- 使用两种方式进行注释，在注释到种的时候可能会出现内存不够（8G一下内存）的情况，优化代码，使得可以在内存不够的情况下顺利完成。
+- R语言构建进化树，这里进化树的构建时间相对较长，如果在win上，使用单线程的话会耗费一定的时间，所以我提供R语言转化的代表序列文件，并支持外部命令构建进化树（Fastree）。
+
+
+
+
+```{r plotQualityProfile, echo=TRUE}
+##定义路径
+path = getwd();path
+path0 <- file.path(path, "a0_rawdata");path0
+dir.create(path0)
+setwd(path)
+```
+
+### 将文件剪切到标准文件夹中
+```{bash}
+mv *.fastq ./a0_rewdata
+
+```
+
+```{R}
+
+
+#提取样品名称
+list.files(path0, full.names = TRUE)
+fnRs <- sort(list.files(path0, pattern="_2", full.names = TRUE))
+fnFs <- sort(list.files(path0, pattern="_1", full.names = TRUE))
+# fnFs <- sort(list.files(path0, pattern="_1.", full.names = TRUE))
+
+
+
+
+sumsam <- length(fnFs)
+#basename提取路径下的文件名， strsplit使用制定分隔符拆分字符串，sapply提取制定字符串
+sample.names <- sapply(strsplit(basename(fnFs), "_1."), `[`, 1)
+sample.names
+
+
+```
+
+
+```{r step1质控, echo=TRUE}
+##step1质控
+#新建过滤文件存放路径
+filtpath <- file.path(path, "a2_filtered") 
+filtFs <- file.path(path, "a2_filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+names(filtFs) <- sample.names
+filtRs <- file.path(path, "a2_filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtRs) <- sample.names
+##使用目前Hiseq测定，数据量在30M-50M之间，预计过滤时间为三分钟（24个序列文件）
+#本数据没有去除引物，手动去除，前端测序采取30bp，后端裁剪40，右边也裁剪一些
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, trimLeft =c(20,10),trimRight =c(10,30),#truncLen=c(220,190),
+                     maxN=0, maxEE=c(2,5), truncQ=2, rm.phix=TRUE,
+                     compress=TRUE, multithread=T) # win上设置不使用多线程指定 multithread=FALSE
+head(out)
+#r step2错误模型学习, echo=TRUE}
+#step2错误模型学习 Learn error rates，错误模型学习，一共有大概一亿条序列，抽取大概50万条来学习错误率，运行时间为15-20分钟一个,共花费时间为40分钟
+#设置随机种子保证学习结果一致
+set.seed(100)
+errF <- learnErrors(filtFs,  multithread=F, randomize=TRUE)
+errR <- learnErrors(filtRs,  multithread=F, randomize=TRUE)
+#{r step3 去除重复并进行dada运算, echo=TRUE}
+
+##step3 去除重复并进行dada运算
+# 构建样品空列表用于添加去除重复操作和DADA操作结果
+ddsF <- vector("list", length(sample.names))
+names(ddsF) <- sample.names
+ddsR <- vector("list", length(sample.names))
+names(ddsR) <- sample.names
+#双端序列需要拼接dds用于存储拼接结果
+dds <- vector("list", length(sample.names))
+names(dds) <- sample.names
+##该步骤平均不到一分钟一个样品（双端）
+for(sam in sample.names) {
+  cat("Processing:", sam, "\n")
+  derepFs <- derepFastq(filtFs[[sam]])
+  derepRs <- derepFastq(filtRs[[sam]])
+  ddsF[[sam]] <- dada(derepFs, err=errF, multithread=T)
+  ddsR[[sam]] <- dada(derepRs, err=errR, multithread=T)
+  dds[[sam]]  <- mergePairs(ddsF[[sam]], derepFs, ddsR[[sam]], derepRs, verbose=TRUE,pool = T)
+  
+}
+
+
+#{r step4-构建ASV文件, echo=TRUE}
+# step4-构建ASV文件，此处可以断开方便继续工作
+seqtab <- makeSequenceTable(dds)
+savedir <- file.path(path, "a3_DADA2_table")
+dir.create(savedir)
+savefile <- file.path(path, "a3_DADA2_table/seqtab_orig.rds") 
+
+saveRDS(seqtab, savefile ) # 保存，方便工作随时停止和继续
+dim(seqtab)
+
+#{r step5-去除嵌合体, echo=TRUE}
+### step5-去除嵌合体，使用denvo方法
+st1 <- readRDS(savefile)
+##多个SVG表格合并可选
+# st2 <- readRDS("path/to/run2/output/seqtab.rds")
+# st3 <- readRDS("path/to/run3/output/seqtab.rds")
+# st.all <- mergeSequenceTables(st1, st2, st3)
+st.all = st1
+seqtab <- removeBimeraDenovo(st.all, method="consensus", multithread=TRUE)
+
+savefile2 <- file.path(path, "a3_DADA2_table/seqtab_final.rds") 
+saveRDS(seqtab, savefile2)#保存最终文件
+#{r 追踪文件的构建, echo=TRUE}
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dds, getN), rowSums(seqtab))
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+colnames(track) <- c("input", "filtered", "denoised", "nonchim")
+rownames(track) <- sample.names
+head(track)
+# ##track文件保存
+savedir2 <- file.path(path, "a9_sum_and_track")
+dir.create(savedir2)
+savefile3 <- file.path(savedir2, "dada2_track.txt") 
+write.table(track , savefile3, sep="\t", quote=F, row.names = T)
+
+
+```
+
+
+```{r name, echo=TRUE}
+#清空内存#######
+rm(list=ls()) 
+
+#step7-物种注释
+path = getwd();path
+savefile2 <- file.path(path, "a3_DADA2_table/seqtab_final.rds") 
+seqtab  <- readRDS(savefile2)
+dim(seqtab)[2]
+
+#choise1,这里我们求取反向互补，因为这里的序列是反的无法匹配注释文件
+
+tax <- assignTaxonomy(seqtab,tryRC = T, "../../../../../DADA2_database_bac//silva_nr_v128_train_set.fa.gz", multithread=TRUE)
+# taxa <- addSpecies(tax, "../DADA2_database_bac/silva_species_assignment_v128.fa.gz")
+tax1 <-  tax[1:2500,1:6]
+dim(tax)
+tax1 <- as.matrix(tax1)
+str(tax1)
+# head(tax1)
+# 种注释非常消耗内存，如果内存不够可以拆分多次注释，用时间换取内存空间
+taxa1 <- addSpecies(tax1, "../../../../../DADA2_database_bac/silva_species_assignment_v128.fa.gz")
+tax2 <-  tax[2501:2525,1:6]
+tax2 <- as.matrix(tax2)
+taxa2 <- addSpecies(tax2, "../../../../../DADA2_database_bac/silva_species_assignment_v128.fa.gz")
+# 
+# tax3 <-  tax[5001:7500,1:6]
+# tax3 <- as.matrix(tax3)
+# taxa3 <- addSpecies(tax3, "../../../../../DADA2_database_bac/silva_species_assignment_v128.fa.gz")
+# 
+# tax4 <-  tax[7501:9000,1:6]
+# tax4 <- as.matrix(tax4)
+# taxa4 <- addSpecies(tax4, "../../../../../DADA2_database_bac/silva_species_assignment_v128.fa.gz")
+# 
+# 
+# tax5 <-  tax[9001:dim(seqtab)[2],1:6]
+# tax5 <- as.matrix(tax5)
+# taxa5 <- addSpecies(tax5, "../../../../../DADA2_database_bac/silva_species_assignment_v128.fa.gz")
+# dim(taxa5)
+# setwd("~/Desktop/pro_tomato_zml105/")
+# dim(taxa4)
+# dim(taxa3)
+# dim(taxa2)
+# dim(taxa1)
+taxa <- rbind(taxa1,taxa2)
+taxa.print <- taxa # Removing sequence rownames for display only
+rownames(taxa.print) <- NULL
+head(taxa.print)
+dim(taxa)
+savedir2 <- file.path(path, "a4_tax")
+dir.create(savedir2)
+savefile3 <- file.path(savedir2, "tax_final_silva_BYS.rds") 
+saveRDS(tax, savefile3) # CHANGE ME ..
+```
+
+
+
+
+```{r name, echo=TRUE}
+##step8 样品mapping文件构建，为一个数据框
+# samples.out <- rownames(seqtab)
+# samples.out
+# Sampletype_time <- substr(samples.out,1,1)
+# Sampletype2 <- substr(samples.out,3,3)
+# 
+# SampleType = paste(Sampletype2,Sampletype_time,sep = "_")
+# samdf <- data.frame(SampleType2=subject, ID=samples.out,
+#                     SampleType=SampleType,
+#                     SampleType2=Sampletype2,
+#                     Sampletype_time = Sampletype_time)
+# rownames(samdf) <- samples.out
+metadata <- import_qiime_sample_data("./mapping.txt")
+dim(metadata)
+head(metadata)
+colnames(metadata)[1] <- "ID"
+
+
+savedir2 <- file.path(path, "a4_tax")
+#dir.create(savedir2)
+savefile3 <- file.path(savedir2, "tax_final_silva_BYS.rds") 
+
+taxa<- readRDS(savefile3)
+library("phyloseq")
+#step9 构建机器保存phyloseq对象
+row.names(seqtab)
+ps <- phyloseq(otu_table(seqtab, taxa_are_rows=F), 
+               sample_data(metadata), 
+               tax_table(taxa))
+ps
+path
+savefile4 <- file.path(path, "a3_DADA2_table/ps.rds") 
+saveRDS(ps, savefile4)
+```
+
+
+
+### 这部分代码构建系统发育树
+我应该将这部分代码放于原始数据line中。但是本次OTU数量很多，不选择R语言构建进化树
+```{r make tree, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+ps = readRDS("./a3_DADA2_table//ps.rds")
+otu = t(otu_table(ps))
+otu = as.data.frame(otu)
+a = row.names(otu)
+# a = otu[,1]
+# a = as.data.frame(a)
+# a$AB1
+library("dada2")
+library("msa")
+library("phangorn")
+seqs <- getSequences(a)
+
+names(seqs) <- seqs
+
+#构建系统发育树及其进化树裁剪#########
+
+
+#进行序列比对, msa提供了三种序列比对的方法的接口 ‘ClustalW’, ‘ClustalOmega’, and ‘MUSCLE’
+mult <- msa(seqs, method="ClustalW", type="dna", order="input")
+#phangorn包用来构建发育树
+
+phang.align <- as.phyDat(mult, type="DNA", names=getSequences(a))
+#?as.phyDat
+dm <- dist.ml(phang.align)
+treeNJ <- NJ(dm) # Note, tip order != sequence order
+fit = pml(treeNJ, data=phang.align)
+
+## negative edges length changed to 0!
+
+fitGTR <- update(fit, k=4, inv=0.2)
+# fitGTR <- optim.pml(fitGTR, model="GTR", optInv=TRUE, optGamma=TRUE,
+#                     rearrangement = "stochastic", control = pml.control(trace = 0))
+detach("package:phangorn", unload=TRUE)
+
+phy_tree(ps) =  fitGTR$tree
+saveRDS(ps, "./result/ps.rds")
+```
+
+```{r name, echo=TRUE}
+##step10：相关文件保存，翻遍日常查看打开
+dim(taxa)
+seqtable.taxa.plus_DECIPHER <- cbind('#seq'=rownames(taxa), t(seqtab), taxa)
+#svg表格导出
+write.table(t(seqtab), "./a3_DADA2_table//otu_table.txt", sep="\t", quote=F, row.names = T)
+#带注释文件的svg表格导出
+write.table(seqtable.taxa.plus_DECIPHER, "./a3_DADA2_table//otu_table_tax.txt", sep="\t", quote=F, row.names = F)
+
+```
+
+
+
+
+
+
+
+
+
+### 为保证代码的连贯性，我将替换代码放置文后，可供替换。
+
+
+### 更换注释方法
+
+```{r 下面方法对DADA2结果可以得到更好的注释, eval=FALSE, include=FALSE}
+# choise2：下面方法对DADA2结果可以得到更好的注释
+dna <- DNAStringSet(getSequences(seqtab)) # Create a DNAStringSet from the ASVs
+load("D:/Shared_Folder/DADA2_database_bac/SILVA_SSU_r132_March2018.RData") # 需要翻墙下载数据库文件
+#ids <- IdTaxa(dna, trainingSet, strand="top", processors=NULL, verbose=FALSE) # processors在win下不可以设置为NULL，注意防止报错
+# 注释序列
+ids <- IdTaxa(dna, trainingSet, strand="top")
+ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species") # ranks of interest
+# Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
+taxid <- t(sapply(ids, function(x) {
+  m <- match(ranks, x$rank)
+  taxa <- x$taxon[m]
+  taxa[startsWith(taxa, "unclassified_")] <- NA
+  taxa
+}))
+colnames(taxid) <- ranks; rownames(taxid) <- getSequences(seqtab)
+taxa.print1 <- taxa1 <- taxid# Removing sequence rownames for display only
+rownames(taxa.print1) <- NULL
+# view the results
+plot(ids, trainingSet)
+# 保存注释文件
+savedir2 <- file.path(path, "a4_tax")
+savefile3 <- file.path(savedir2, "tax_final_silva_DECIPHER.rds")
+saveRDS(taxa1, savefile3)
+```
+
+#### 导出fa文件，使用外部命令建树
+如果序列数量过大，我们使用多序列比对，并使用fastree建树
+```{r out seq.fa file, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("phyloseq")
+ps = readRDS("./a3_DADA2_table/ps.rds")
+otu = t(otu_table(ps))
+otu = as.data.frame(otu)
+a = row.names(otu)
+# a = otu[,1]
+# a = as.data.frame(a)
+# a$AB1
+library("dada2")
+# library("msa")
+library("phangorn")
+seqs <- getSequences(a)
+
+names(seqs) <- seqs
+
+names(seqs) = paste(">",seqs,sep = "")
+x = rep("a",length(seqs)*2)
+a = length(seqs)*2
+
+for (i in 1:a) {
+  x[i*2-1] = names(seqs[i])
+  x[i*2] = seqs[i]
+  
+  
+}
+bb = data.frame(x = x)
+bb$x = as.factor(bb$x)
+#注意保存去除双引号
+write.table(bb,"./rep_set.txt",row.names = F,col.names = F,quote=F)
+```
+
+
+### 使用外部命令建树
+
+```{bash}
+#调用usearch建树
+usearch -cluster_agg rep_set.txt -treeout rep_set.tree
+
+
+```
+
+```{r name, echo=TRUE}
+
+ps = readRDS("./a3_DADA2_table//ps.rds")
+ps
+library("ggtree")
+tree = read.tree("./rep_set.tree")
+phy_tree(ps) =  tree
+saveRDS(ps, "./a3_DADA2_table//ps.rds")
+```
+
