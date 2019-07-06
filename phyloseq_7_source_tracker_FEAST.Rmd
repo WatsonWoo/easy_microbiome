@@ -1,0 +1,259 @@
+---
+title: "phyloseq_7_source_tracker_FEAST"
+author: "wentao"
+date: "2019年7月6日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 微生物来源分析
+FEAST提供两种方式来做微生物来源分析。
+1. 基于单个目标的来源。
+2.基于多个目标和多个来源。
+
+首先我们来演示基于单个目标和来源的来源分析
+
+
+```{r cars1212}
+# rm(list = ls())
+# gc()
+
+path = "./phyloseq_7_source_FEAST"
+dir.create(path)
+##导入主函数
+source("./FEAST-master/FEAST_src//src.R")
+
+
+ps = readRDS("./a3_DADA2_table/ps_OTU_.ps")
+# 导入分组文件和OTU表格
+metadata <- as.data.frame(sample_data(ps))
+head(metadata)
+# Load OTU table
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+otus <-  as.data.frame(t(vegan_otu(ps)))
+otus <- t(as.matrix(otus))
+
+
+
+###下面区分目标样品和来源样品。
+
+envs <- metadata$SampleType
+
+metadata<- arrange(metadata, SampleType)
+metadata$id = rep(1:6,4)
+Ids <- na.omit(unique(metadata$id))
+it = 1
+
+train.ix <- which(metadata$SampleType%in%c("B","C","D")& metadata$id == Ids[it])
+test.ix <- which(metadata$SampleType=='A'  & metadata$id == Ids[it])
+
+
+# Extract the source environments and source/sink indices
+
+num_sources <- length(train.ix) #number of sources
+COVERAGE =  min(rowSums(otus[c(train.ix, test.ix),]))  #Can be adjusted by the user
+
+
+#对两组样品进行抽平
+sources <- as.matrix(rarefy(otus[train.ix,], COVERAGE))
+sinks <- as.matrix(rarefy(t(as.matrix(otus[test.ix,])), COVERAGE))
+
+dim(sinks)
+print(paste("Number of OTUs in the sink sample = ",length(which(sinks > 0))))
+print(paste("Seq depth in the sources and sink samples = ",COVERAGE))
+print(paste("The sink is:", envs[test.ix]))
+
+
+
+
+
+# Estimate source proportions for each sink
+EM_iterations = 1000 # number of EM iterations. default value
+
+FEAST_output<-FEAST(source=sources, sinks = t(sinks), env = envs[train.ix], em_itr = EM_iterations, COVERAGE = COVERAGE)
+Proportions_est <- FEAST_output$data_prop[,1]
+names(Proportions_est) <- c(as.character(envs[train.ix]), "unknown")
+
+print("Source mixing proportions")
+Proportions_est
+round(Proportions_est,3)
+
+```
+
+
+
+
+## 就正常样品而言，我们都会测定重复，这里基于多个重复的sourceracker分析
+
+基于多个目标和来源的微生物来源分析:
+different_sources_flags设置目标样品和来源样品的对应关系。是否不同目标对应不同来源样品，还是不同目标对应相同来源样品，
+```{r more}
+
+
+
+##导入主函数
+source("./FEAST-master/FEAST_src//src.R")
+
+
+ps = readRDS("./a3_DADA2_table/ps_OTU_.ps")
+# 导入分组文件和OTU表格
+metadata <- as.data.frame(sample_data(ps))
+head(metadata)
+# Load OTU table
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+otus <-  as.data.frame(t(vegan_otu(ps)))
+otus <- t(as.matrix(otus))
+
+
+head(metadata)
+
+metadata<- arrange(metadata, SampleType)
+metadata$id = rep(1:6,4)
+EM_iterations = 1000 #default value
+different_sources_flag = 1
+
+
+envs <- metadata$SampleType
+Ids <- na.omit(unique(metadata$id))
+Proportions_est <- list()
+it = 1
+
+for(it in 1:length(Ids)){
+  
+  
+  # Extract the source environments and source/sink indices
+  if(different_sources_flag == 1){
+    
+    train.ix <- which(metadata$SampleType%in%c("B","C","D")& metadata$id == Ids[it])
+    test.ix <- which(metadata$SampleType=='A'  & metadata$id == Ids[it])
+    
+  }
+  
+  else{
+    
+    train.ix <- which(metadata$SampleType%in%c("B","C","D"))
+    test.ix <- which(metadata$SampleType=='A' & metadata$id == Ids[it])
+  }
+  
+  num_sources <- length(train.ix)
+  COVERAGE =  min(rowSums(otus[c(train.ix, test.ix),]))  #Can be adjusted by the user
+  
+  # Define sources and sinks
+  
+  sources <- as.matrix(rarefy(otus[train.ix,], COVERAGE))
+  sinks <- as.matrix(rarefy(t(as.matrix(otus[test.ix,])), COVERAGE))
+  
+  
+  print(paste("Number of OTUs in the sink sample = ",length(which(sinks > 0))))
+  print(paste("Seq depth in the sources and sink samples = ",COVERAGE))
+  print(paste("The sink is:", envs[test.ix]))
+  
+  # Estimate source proportions for each sink
+  
+  FEAST_output<-FEAST(source=sources, sinks = t(sinks), env = envs[train.ix], em_itr = EM_iterations, COVERAGE = COVERAGE)
+  Proportions_est[[it]] <- FEAST_output$data_prop[,1]
+  
+  
+  names(Proportions_est[[it]]) <- c(as.character(envs[train.ix]), "unknown")
+  
+  if(length(Proportions_est[[it]]) < num_sources +1){
+    
+    tmp = Proportions_est[[it]]
+    Proportions_est[[it]][num_sources] = NA
+    Proportions_est[[it]][num_sources+1] = tmp[num_sources]
+  }
+  
+  print("Source mixing proportions")
+  print(Proportions_est[[it]])
+  
+  
+}
+
+print(Proportions_est)
+
+
+went = as.data.frame(Proportions_est)
+colnames(went) = paste("repeat_",unique(metadata$id),sep = "")
+head(went)
+
+filename = paste(path,"/FEAST.csv",sep = "")
+write.csv(went,filename,quote = F)
+
+
+
+
+
+
+
+```
+
+
+## 出图
+
+
+
+```{r cars}
+
+library(RColorBrewer)  
+library(dplyr)
+library(graphics)
+
+
+head(went)
+
+plotname = paste(path,"/FEAST.pdf",sep = "")
+pdf(file = plotname,width = 12,height = 12)
+par(mfrow=c((length(unique(metadata$SampleType))%/%2 +2 ),2), mar=c(1,1,1,1))
+# layouts = as.character(unique(metadata$SampleType))
+
+for (i in 1:length(colnames(went))) {
+  
+  labs <- paste0(row.names(went)," \n(", round(went[,i]/sum(went[,i])*100,2), "%)")
+  
+  pie(went[,i],labels=labs, init.angle=90,col =  brewer.pal(nrow(went), "Reds"),
+      border="black",main =colnames(went)[i] )
+}
+
+dev.off()
+
+```
+
+
+## 基于多个重复，我们合并饼图展示
+
+
+```{r cars123}
+head(went)
+
+
+asx = as.data.frame(rowMeans(went))
+
+asx  = as.matrix(asx)
+asx_norm = t(t(asx)/colSums(asx)) #* 100 # normalization to total 100
+head(asx_norm)
+
+plotname = paste(path,"/FEAST_mean.pdf",sep = "")
+pdf(file = plotname,width = 6,height = 6)
+labs <- paste0(row.names(asx_norm)," \n(", round(asx_norm[,1]/sum(asx_norm[,1])*100,2), "%)")
+
+pie(asx_norm[,1],labels=labs, init.angle=90,col =  brewer.pal(nrow(went), "Reds"),
+    border="black",main = "mean of source tracker")
+dev.off()
+
+```
+
