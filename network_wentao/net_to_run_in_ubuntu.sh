@@ -1,0 +1,16 @@
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/A_all_net.txt -o ./sparcc_net_result_matrix/A_all -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/A_H_net.txt -o ./sparcc_net_result_matrix/A_H -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/A_L_net.txt -o ./sparcc_net_result_matrix/A_L -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/A_M_net.txt -o ./sparcc_net_result_matrix/A_M -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/B_all_net.txt -o ./sparcc_net_result_matrix/B_all -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/B_H_net.txt -o ./sparcc_net_result_matrix/B_H -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/B_L_net.txt -o ./sparcc_net_result_matrix/B_L -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/B_M_net.txt -o ./sparcc_net_result_matrix/B_M -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/C_all_net.txt -o ./sparcc_net_result_matrix/C_all -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/C_H_net.txt -o ./sparcc_net_result_matrix/C_H -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/C_L_net.txt -o ./sparcc_net_result_matrix/C_L -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/C_M_net.txt -o ./sparcc_net_result_matrix/C_M -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/D_all_net.txt -o ./sparcc_net_result_matrix/D_all -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/D_H_net.txt -o ./sparcc_net_result_matrix/D_H -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/D_L_net.txt -o ./sparcc_net_result_matrix/D_L -n 10
+sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ./data/D_M_net.txt -o ./sparcc_net_result_matrix/D_M -n 10

@@ -1,0 +1,347 @@
+---
+title: "phyloseq_net_cor_Freq"
+author: "wentao"
+date: "2019年6月13日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### 基于网络中相关系数的统计及其可视化工作
+
+```{r cars, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ps = readRDS("../a3_DADA2_table/ps.rds");ps
+ps = filter_taxa(ps, function(x) sum(x ) > 200 , TRUE);ps
+# ps1 <- prune_samples(sample_sums(ps) >=500,ps);ps1
+ps1 = ps
+d = "all"
+ps1 = filter_taxa(ps1, function(x) sum(x ) > 0 , TRUE)#去除全部为0的otu
+ps1
+design = as.data.frame(sample_data(ps1))
+
+
+
+library("dplyr")
+library("ggplot2")
+layouts = as.character(unique(design$SampleType))
+y = matrix(1:2409,nrow = 40,ncol = c(length(layouts)+1))
+y = as.data.frame(y)
+
+# layouts = c("CF","CFPM2","PK","PM2")
+for (i in 1:length(layouts)) {
+  ii = layouts[i]
+  ## 基本参数设置
+  # 存储otu-sample矩阵的文件名
+  otu_sample_file <- paste("./data/",ii,"_",d,"_net",".txt",sep = "")
+  # sparcc cor 文件
+  r_sparcc_file<-paste("sparcc_net_result_matrix/",ii,"_",d,"/basis_corr/cor_sparcc.out",sep = "")
+  # sparcc p-value 文件
+  p_sparcc_file<-paste("sparcc_net_result_matrix/",ii,"_",d,"/pvals/pvals_two_sided.txt",sep = "")
+  
+  
+  # 文件读取
+  otu <- read.delim(otu_sample_file,row.names=1)
+  # 转置otu表
+  otu <-t(otu)
+  dim(otu)
+  # 读取r值矩阵
+  r_sparcc <- read.table(r_sparcc_file,row.names=1)
+  # str(r_sparcc)
+  r_sparcc = as.matrix(r_sparcc)
+  # 读取p值矩阵
+  p_sparcc <- read.table(p_sparcc_file,row.names=1)
+  # str(p_sparcc)
+  p_sparcc  = as.matrix(p_sparcc)
+  
+  #对角线相关为1，自身相关，所以去除
+  # diag(r_sparcc)=rep(500,length(diag(r_sparcc)))
+  # #改变矩阵维度
+  # a = dim(p_sparcc) = c(24964,1)
+  #因为我们矩阵上三角和下三角都是一样的，所以我提取上三角数据进行统计分析，下三角也行
+  #注意上三角不包括对角，注意概念清晰
+  corr_all = r_sparcc[lower.tri(r_sparcc)]
+  p_all = p_sparcc[lower.tri(p_sparcc)]
+  #是否挑选先不显著
+  corr = data.frame(cor = corr_all,p = p_all)
+  # corr =  filter(corr, p < 0.05)
+  ##做一张图的相关分布图表
+  duration = corr$cor
+  breaks = seq(-1, 1, by=0.05) 
+  duration.cut = cut(duration, breaks, right=FALSE) 
+  duration.freq = table(duration.cut)
+  xcor = as.data.frame(duration.freq)
+  head(xcor)
+  
+  
+ 
+  
+  
+  # colnames(xcor) = c("breaks",i)
+  # xcor$ID = seq(-1, 1, by=0.05)[1:c(length(seq(-1, 1, by=0.05) )-1)] 
+
+  y[,1] = xcor[1]
+  y[,i+1] = xcor[2]
+  
+  head(xcor)
+  
+ 
+
+}
+
+head(y)
+colnames(y) = c("ID",layouts)
+y$ID = seq(-1, 1, by=0.05)[1:c(length(seq(-1, 1, by=0.05) )-1)] 
+y$breaks = NULL
+library(reshape2)
+fil = melt(y,id.vars = "ID",variable.name = "breaks",value.name = "Freq")
+head(fil)
+p = ggplot(fil,aes(x = ID,y = Freq,fill = breaks)) + 
+  geom_bar(stat = "identity",position = "dodge",color = "black")+theme_classic()
+p
+path = "./net_cor_Freq/"
+dir.create(path)
+plotname = paste(path,length(layouts),"group",".pdf",sep = "")
+ggsave(plotname,p,width = 10,height =6)
+
+
+
+
+
+
+
+```
+### 只选择显著的关系来进行相关关系的可视化
+
+
+```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+library("dplyr")
+library("ggplot2")
+layouts = c("CF","CFPM2","PK","PM2")
+y = matrix(1:2409,nrow = 40,ncol = c(length(layouts)+1))
+y = as.data.frame(y)
+
+layouts = as.character(unique(design$SampleType))
+
+i = 1
+for (i in 1:length(layouts)) {
+  ii = layouts[i]
+  ## 基本参数设置
+  # 存储otu-sample矩阵的文件名
+  otu_sample_file <- paste("./data/",ii,"_",d,"_net",".txt",sep = "")
+  # sparcc cor 文件
+  r_sparcc_file<-paste("sparcc_net_result_matrix/",ii,"_",d,"/basis_corr/cor_sparcc.out",sep = "")
+  # sparcc p-value 文件
+  p_sparcc_file<-paste("sparcc_net_result_matrix/",ii,"_",d,"/pvals/pvals_two_sided.txt",sep = "")
+  
+  
+  # 文件读取
+  otu <- read.delim(otu_sample_file,row.names=1)
+  # 转置otu表
+  otu <-t(otu)
+  dim(otu)
+  # 读取r值矩阵
+  r_sparcc <- read.table(r_sparcc_file,row.names=1)
+  # str(r_sparcc)
+  r_sparcc = as.matrix(r_sparcc)
+  # 读取p值矩阵
+  p_sparcc <- read.table(p_sparcc_file,row.names=1)
+  # str(p_sparcc)
+  p_sparcc  = as.matrix(p_sparcc)
+  
+  #对角线相关为1，自身相关，所以去除
+  # diag(r_sparcc)=rep(500,length(diag(r_sparcc)))
+  # #改变矩阵维度
+  # a = dim(p_sparcc) = c(24964,1)
+  #因为我们矩阵上三角和下三角都是一样的，所以我提取上三角数据进行统计分析，下三角也行
+  #注意上三角不包括对角，注意概念清晰
+  corr_all = r_sparcc[lower.tri(r_sparcc)]
+  p_all = p_sparcc[lower.tri(p_sparcc)]
+  #是否挑选先不显著
+  corr = data.frame(cor = corr_all,p = p_all)
+  corr =  filter(corr, p < 0.05)
+  ##做一张图的相关分布图表
+  duration = corr$cor
+  breaks = seq(-1, 1, by=0.05) 
+  duration.cut = cut(duration, breaks, right=FALSE) 
+  duration.freq = table(duration.cut)
+  xcor = as.data.frame(duration.freq)
+  head(xcor)
+
+  y[,1] = xcor[1]
+  y[,i+1] = xcor[2]
+  
+  head(xcor)
+}
+
+head(y)
+colnames(y) = c("ID",layouts)
+y$ID = seq(-1, 1, by=0.05)[1:c(length(seq(-1, 1, by=0.05) )-1)] 
+y$breaks = NULL
+library(reshape2)
+fil = melt(y,id.vars = "ID",variable.name = "breaks",value.name = "Freq")
+head(fil)
+p = ggplot(fil,aes(x = ID,y = Freq,fill = breaks)) + 
+  geom_bar(stat = "identity",position = "dodge",color = "black")+theme_classic()
+p
+path = "./net_cor_Freq/"
+dir.create(path)
+plotname = paste(path,length(layouts),"group","signif",".pdf",sep = "")
+ggsave(plotname,p,width = 10,height =6)
+
+
+```
+
+### 正相关和负相关比例对于我们理解不同处理网络具有很重要作用
+
+```{r cor percent, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+head(y)
+grou = rep("A",length(y$ID))
+
+for (i in 1:length(y$ID)) {
+  if (y$ID[i]> 0) {
+    grou[i] = "positive correlation"
+  }
+  if (y$ID[i]< 0) {
+    grou[i] = "negative correlation"
+  }
+  if (y$ID[i]== 0) {
+    grou[i] = "Irrelevant"
+  }
+  
+}
+
+iris.split <- split(y,as.factor(grou))
+#数据分组计算平均值
+iris.apply <- lapply(iris.split,function(x)colSums(x[-1]))
+# 组合结果
+iris.combine <- do.call(rbind,iris.apply)
+cor_sum = as.data.frame(iris.combine)
+head(cor_sum)
+cor_sum = as.matrix(cor_sum)
+cor_sum_norm = t(t(cor_sum)/colSums(cor_sum)) #* 100 # normalization to total 100
+head(cor_sum_norm)
+
+filename = paste(path,length(layouts),"group","sum_cor",".csv",sep = "")
+write.csv(cor_sum_norm ,filename,quote = F)
+
+
+# library(reshape2)
+
+fil = melt(cor_sum_norm,id.vars = row.names(cor_sum_norm),variable.name = "breaks",value.name = "Freq")
+head(fil)
+p = ggplot(fil,aes(x = Var2,y = Freq,fill = Var1)) + 
+  geom_bar(stat = "identity",position = "dodge",color = "black")+theme_classic()
+p = p + geom_text(aes(label = round(fil$Freq,3)),vjust = 1.5,color = "black",position = position_dodge(.9),size = 4)
+p
+
+
+
+plotname = paste(path,length(layouts),"group","cor_sum",".pdf",sep = "")
+ggsave(plotname,p,width = 10,height =6)
+
+
+
+
+
+
+
+
+
+```
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+

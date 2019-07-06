@@ -1,0 +1,1017 @@
+---
+title: "network_for_SparCC_and_plot"
+author: "wentao"
+date: "2019年4月19日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## network构建流程
+这部分提供：
+1，网络可视化
+2.网络度分布可视化，
+3.网络全部性质，节点性质计算，
+4.对应随机网络构建及其性质。
+
+### 在进行网络分析前加载手写函数
+为了计算节点和网络整体属性
+```{r network loading faction, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# 加载网络性质的计算函数
+source("net_pro.R")
+# 加载节点性质的计算函数
+source("node_pro.R")
+########相关函数加载#########
+path = getwd()
+```
+
+
+### 构造完整OTU表格，高丰度，中丰度表格，低丰度表格进行网络构建
+我们将整个OTU表格分为高中低丰度和全部一起做网络分析；
+
+问题：注意ps对象得到的OTU表格是横向的还是纵向
+
+
+```{r network pro, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+#注意使用原始coun丰度文件
+library("phyloseq")
+ps = readRDS("../a3_DADA2_table//ps.rds")
+ps = filter_taxa(ps, function(x) sum(x ) > 50 , TRUE);ps
+# ps1 <- prune_samples(sample_sums(ps) >=500,ps);ps1
+ps1 = filter_taxa(ps1, function(x) sum(x ) > 0 , TRUE)#去除全部为0的otu
+ps1
+design = as.data.frame(sample_data(ps1))
+#######下面提取每个处理的单独phyloseq对象
+ps1
+dir.create("./data")
+# level = "H"
+# level = "M"
+# level = "L"
+value1 = 0.008
+value2 = 0.003
+i = 1
+aa = unique(design$SampleType)
+
+
+if (taxa_are_rows(ps) == F) {
+  for (i in 1:length(aa)) {
+    
+    
+    design = as.data.frame(sample_data(ps1))
+    colnames(design)[1] = "ID"
+    sample_data(ps1) = design
+    
+    # map1<-design[grep(aa[i],design$SampleType),]
+    map1<- subset(design,SampleType==aa[i])
+    
+    dim(map1)
+    ps_sub <- subset_samples(ps1,ID %in% map1$ID)
+    ps_sub = filter_taxa(ps_sub, function(x) sum(x ) > 1 , TRUE)#筛选序列数量大于1的
+    ps_sub
+    filename = paste("./data/",aa[i],"_all_","net.txt",sep = "")
+    write.table(as.data.frame(t(vegan_otu(ps_sub))),filename,sep = "\t",col.names =NA)
+    
+    ###高丰度为外分之五以上
+    ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) > value1, TRUE);
+    ps_sub_re
+    
+    netH = otu_table(ps_sub)[,colnames(otu_table(ps_sub_re))]
+    dim(netH)
+    
+    filename = paste("./data/",aa[i],"_H_","net.txt",sep = "")
+    write.table(as.data.frame(t(netH)),filename,sep = "\t",col.names =NA)
+    
+    
+    
+    ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) < value2, TRUE)
+    ps_sub_re
+    netL  = otu_table(ps_sub)[,colnames(otu_table(ps_sub_re))]
+    dim(netL)
+    filename = paste("./data/",aa[i],"_L_","net.txt",sep = "")
+    write.table(as.data.frame(t(netL)),filename,sep = "\t",col.names =NA)
+    
+    
+    ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) < value1, TRUE)
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) > value2, TRUE)
+    ps_sub_re
+    netM  = otu_table(ps_sub)[,colnames(otu_table(ps_sub_re))]
+    dim(netM)
+    filename = paste("./data/",aa[i],"_M_","net.txt",sep = "")
+    write.table(as.data.frame(t(netM)),filename,sep = "\t",col.names =NA)
+  }
+}
+
+if (taxa_are_rows(ps) == T) {
+  
+  for (i in 1:length(aa)) {
+    
+    
+    design = as.data.frame(sample_data(ps1))
+    colnames(design)[1] = "ID"
+    sample_data(ps1) = design
+    
+    # map1<-design[grep(aa[i],design$SampleType),]
+    map1<- subset(design,SampleType==aa[i])
+    
+    dim(map1)
+    ps_sub <- subset_samples(ps1,ID %in% map1$ID)
+    ps_sub = filter_taxa(ps_sub, function(x) sum(x ) > 1 , TRUE)#筛选序列数量大于1的
+    ps_sub
+    filename = paste("./data/",aa[i],"_all_","net.txt",sep = "")
+    write.table(as.data.frame(otu_table(ps_sub)),filename,sep = "\t",col.names =NA)
+    
+    ###高丰度为外分之五以上
+    ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) > value1, TRUE);
+    ps_sub_re
+    
+    netH = otu_table(ps_sub)[row.names(otu_table(ps_sub_re))]
+    dim(netH)
+    
+    filename = paste("./data/",aa[i],"_H_","net.txt",sep = "")
+    write.table(as.data.frame(netH),filename,sep = "\t",col.names =NA)
+    
+    
+    
+    ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) < value2, TRUE)
+    ps_sub_re
+    netL  = otu_table(ps_sub)[row.names(otu_table(ps_sub_re))]
+    dim(netL)
+    filename = paste("./data/",aa[i],"_L_","net.txt",sep = "")
+    write.table(as.data.frame(netL),filename,sep = "\t",col.names =NA)
+    
+    
+    ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) < value1, TRUE)
+    ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) > value2, TRUE)
+    ps_sub_re
+    netM  = otu_table(ps_sub)[row.names(otu_table(ps_sub_re))]
+    dim(netM)
+    filename = paste("./data/",aa[i],"_M_","net.txt",sep = "")
+    write.table(as.data.frame(netM),filename,sep = "\t",col.names =NA)
+    
+    
+  }
+  
+  
+}
+```
+
+
+
+
+### 下面进行SPArcc的分析
+切换目录到当前的网络分析文件夹中,使用如下命令构建网络；下面是封装好的sparcc函数，内包括了三步，完整的构建了网络。
+
+```{R ubuntu run sparcc, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+##构造sparcc网络运行命令
+
+fil = list.files("./data/") 
+fil 
+out_fil <- sapply(strsplit(fil , "_net"), `[`, 1)
+out_fil 
+dir.create("./sparcc_net_result_matrix")
+net_to_run = paste("sh ~/Desktop/Shared_Folder/sparcc/run_sparcc.sh  -f ","./data/",fil," -o ./sparcc_net_result_matrix/",out_fil," -n 10",sep = "")
+# net_to_run = as.factor(net_to_run)
+write.table(net_to_run,"./net_to_run_in_ubuntu.sh",row.names = F,col.names = F,quote = F)
+
+
+
+```
+
+### 可视化网络全部网络进行可视化
+all 组的网络可视化
+
+```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+
+y = matrix(1:2409,nrow = 14,ncol = length(unique(design$SampleType)))
+d = "all"
+e = paste("network_results_",d,sep = "")
+dir.create(e)
+plotname <- paste(e,"/co-occurrence_net",".pdf",sep = "")
+r.threshold=0.1
+p.threshold=0.05
+
+# setwd("./network/")
+
+pdf(file = plotname,width = 80,height = 60)
+par(mfrow=c((length(unique(design$SampleType))%/%2 +1),2), mar=c(1,1,1,1))
+layouts = as.character(unique(design$SampleType))
+
+for (layout in layouts) {
+  
+  print(layout)
+
+  b = ps1
+  c = layouts
+  # d = "H"
+  # e = paste("network_results",d,sep = "")
+  
+  library("phyloseq")
+  ## 基本参数设置
+  # 存储otu-sample矩阵的文件名
+  otu_sample_file <- paste("./data/",layout,"_",d,"_net",".txt",sep = "")
+  # sparcc cor 文件
+  r_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/basis_corr/cor_sparcc.out",sep = "")
+  # sparcc p-value 文件
+  p_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/pvals/pvals_two_sided.txt",sep = "")
+  
+  # ps1 = readRDS("../ps1.rds")
+  # design = as.data.frame(sample_data(ps1))
+  # map1<-design[grep(c,row.names(design)),]
+  # dim(map1)
+  # a <- subset_samples(ps1,X.SampleID %in% map1$X.SampleID)
+  # a = filter_taxa(a, function(x) sum(x ) > 1 , TRUE)#筛选序列数量大于1的
+  # 
+  # 
+  # b  = transform_sample_counts(a, function(x) x / sum(x) )
+  # b = filter_taxa(b, function(x) mean(x) > 0.0005, TRUE);a###0.001
+  
+  
+  # 设定构建网络的r和p阈值
+  
+  # 调整vertex大小
+  size=2
+  # 设定节点颜色所采用的信息列，如otu.tax8第二列Phylum
+  gcol=2
+  # 设定节点颜色所显示分类群的最大个数
+  maxtaxnum=5
+  # 设定节点标签所采用的信息列，如taxonomy.txt第二列Phylum
+  glab=3
+  otu_sample_file
+  
+  # 文件读取
+  otu <- read.delim(otu_sample_file,row.names=1)
+  head(otu)
+  # 转置otu表
+  otu <-t(otu)
+  dim(otu)
+  # 读取r值矩阵
+  r_sparcc <- read.table(r_sparcc_file,row.names=1)
+  # str(r_sparcc)
+  r_sparcc = as.matrix(r_sparcc)
+  # 读取p值矩阵
+  p_sparcc <- read.table(p_sparcc_file,row.names=1)
+  # str(p_sparcc)
+  p_sparcc  = as.matrix(p_sparcc)
+  
+  #本函数讲spracc对象转换为igraph对象并构建网络
+  # 矩阵到igraph对象的转换（封装到自定义函数中）
+  # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+  library("igraph")
+  matrix2igraph<-function(r.threshold,p.threshold){
+    
+    occor.p<-as.matrix(p_sparcc)
+    ##R值
+    occor.r<-as.matrix(r_sparcc)
+    # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+    occor.r[occor.p>p.threshold|abs(occor.r)<r.threshold] = 0 
+    
+    # 构建igraph对象构建邻接矩阵
+    igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=TRUE,diag=FALSE)
+    igraph
+
+    bad.vs <- V(igraph)[degree(igraph) == 0]
+    igraph <- delete.vertices(igraph, bad.vs)
+    igraph
+  }
+  
+  #注意spracc出来结果怎么是开头带有# 的，注意去除
+  igraph<-matrix2igraph(r.threshold,p.threshold)
+  igraph
+
+  ## 网络图相关参数修改包括边的颜色：E(igraph)$color
+  
+  ###网络边的赋值及其设置
+  igraph.weight <- E(igraph)$weight# 将igraph weight属性赋值到igraph.weight,用于后边做图
+  E(igraph)$weight <- NA
+  # igraph<-remove.edge.attribute(igraph,"weight")#把边值删除
+  netpro_result<-net_pro(igraph)
+  colnames(netpro_result)<-layout
+  y = as.data.frame(y)
+  colnames(y) = layouts
+  # head(y)
+  y[layout] = netpro_result[,1]
+  row.names(y) = row.names(netpro_result)
+  y
+  # 按相关类型设置边颜色
+  # 如果构建网络时，weighted=NULL,此步骤不能统计
+  sum(igraph.weight>0)# number of postive correlation
+  sum(igraph.weight<0)# number of negative correlation
+  
+  # set edge color，postive correlation 设定为red, negative correlation设定为blue
+  E.color <- igraph.weight
+  E.color <- ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+  E(igraph)$color <- as.character(E.color)
+  
+  
+  # 创建存放结果文件夹
+  # dir.create(e)
+  
+  ###改变网络节点边框宽度
+  mycircle <- function(coords, v=NULL, params) {
+    vertex.color <- params("vertex", "color")
+    if (length(vertex.color) != 1 && !is.null(v)) {
+      vertex.color <- vertex.color[v]
+    }
+    vertex.size  <- 1/200 * params("vertex", "size")
+    if (length(vertex.size) != 1 && !is.null(v)) {
+      vertex.size <- vertex.size[v]
+    }
+    vertex.frame.color <- params("vertex", "frame.color")
+    if (length(vertex.frame.color) != 1 && !is.null(v)) {
+      vertex.frame.color <- vertex.frame.color[v]
+    }
+    vertex.frame.width <- params("vertex", "frame.width")
+    if (length(vertex.frame.width) != 1 && !is.null(v)) {
+      vertex.frame.width <- vertex.frame.width[v]
+    }
+    
+    mapply(coords[,1], coords[,2], vertex.color, vertex.frame.color,
+           vertex.size, vertex.frame.width,
+           FUN=function(x, y, bg, fg, size, lwd) {
+             symbols(x=x, y=y, bg=bg, fg=fg, lwd=lwd,
+                     circles=size, add=TRUE, inches=FALSE)
+           })
+  }
+  
+  add.vertex.shape("fcircle", clip=igraph.shape.noclip,
+                   plot=mycircle, parameters=list(vertex.frame.color=1,
+                                                  vertex.frame.width=1))
+  
+  
+  
+  
+  l <- layout_nicely(igraph)
+  # layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1] 
+  # layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+  # layouts
+  l <- norm_coords(l, ymin=-1, ymax=1, xmin=-1, xmax=1)
+  
+  set.seed(123)
+  #节点颜色代表门，节点大小代表平均丰度，连线颜色代表正负相关
+  plot(igraph,main=paste(layout, "network",sep = ""), 
+       layout=l,
+       vertex.shape="fcircle", 
+       # vertex.frame.color="white",
+       vertex.label=NA ,
+       vertex.frame.color="#984EA3",
+       vertex.color="#984EA3",
+       vertex.size =2,
+       vertex.frame.alpha =0.5,
+       edge.width=0.5,
+       edge.lty=2,
+       edge.curved=F,
+       margin=c(0,0,0,0)
+       #vertex.frame.width=5
+  )
+  
+  
+  # legend(1,1, legend=otu.tax.levels,col=levels(node.col), pch=19,cex=1,bty="n")
+  legend(1,1.5, legend=c("pos.cor","neg.cor"),col=c("red","blue"),lty=1,lwd=2, bty="n",cex=1)
+}
+
+dev.off()
+tablename <- paste(e,"/co-occurrence_net_net_pro",".csv",sep = "")
+write.csv(y,tablename)
+
+```
+
+
+
+### 进行网络度分布，0分布等运算出图
+all 组网络全局等指标计算
+
+```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("phyloseq")
+d = "all"
+#设置页面格式
+xaxa = (length(unique(design$SampleType))%/%2 +1)
+e = paste("network_results_",d,sep = "")
+dir.create(e)
+plotname <- paste(e,"/co-occurrence_network_degree_distribution_",".pdf",sep = "")
+# r.threshold=0.7
+# p.threshold=0.05
+
+# setwd("./network/")
+pdf(file = plotname,width = 18,height = 12)
+par(mfrow=c((length(unique(design$SampleType))%/%2 +1),2), mar=c(1,1,1,1))
+# layouts = c("H_bulk","D_bulk")
+
+# layout = "H_bulk"
+for (layout in layouts) {
+  
+  print(layout)
+  # treat = paste("net_3_2_H",layout,sep = "")
+  # ps1 = readRDS("..//ps7.rds")
+  # ps1 <- prune_samples(sample_sums(ps) >=500,ps);ps1
+  b = ps1
+  c = layouts
+  # d = "H"
+  # e = paste("network_results",d,sep = "")
+  
+  library("phyloseq")
+  ## 基本参数设置
+  # 存储otu-sample矩阵的文件名
+  otu_sample_file <- paste("./data/",layout,"_",d,"_net",".txt",sep = "")
+  # sparcc cor 文件
+  r_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/basis_corr/cor_sparcc.out",sep = "")
+  # sparcc p-value 文件
+  p_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/pvals/pvals_two_sided.txt",sep = "")
+  
+
+  # 设定构建网络的r和p阈值
+  
+  # 调整vertex大小
+  size=2
+  # 设定节点颜色所采用的信息列，如otu.tax8第二列Phylum
+  gcol=2
+  # 设定节点颜色所显示分类群的最大个数
+  maxtaxnum=5
+  # 设定节点标签所采用的信息列，如taxonomy.txt第二列Phylum
+  glab=3
+  otu_sample_file
+  
+  # 文件读取
+  otu <- read.delim(otu_sample_file,row.names=1)
+  head(otu)
+  # 转置otu表
+  otu <-t(otu)
+  dim(otu)
+  # 读取r值矩阵
+  r_sparcc <- read.table(r_sparcc_file,row.names=1)
+  # str(r_sparcc)
+  r_sparcc = as.matrix(r_sparcc)
+  # 读取p值矩阵
+  p_sparcc <- read.table(p_sparcc_file,row.names=1)
+  # str(p_sparcc)
+  p_sparcc  = as.matrix(p_sparcc)
+  
+  #本函数讲spracc对象转换为igraph对象并构建网络
+  # 矩阵到igraph对象的转换（封装到自定义函数中）
+  # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+  library("igraph")
+  matrix2igraph<-function(r.threshold,p.threshold){
+    
+    occor.p<-as.matrix(p_sparcc)
+    ##R值
+    occor.r<-as.matrix(r_sparcc)
+    # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+    occor.r[occor.p>p.threshold|abs(occor.r)<r.threshold] = 0 
+    
+    # 构建igraph对象构建邻接矩阵
+    igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=TRUE,diag=FALSE)
+    igraph
+    # NOTE:可以设置weighted=NULL,但是此时要注意此函数只能识别相互作用矩阵内正整数，所以应用前请确保矩阵正确。
+    # 可以按下面命令转换数据
+    # occor.r[occor.r!=0] <- 1
+    # igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=NULL,diag=FALSE)
+    
+    # 是否去掉孤立顶点，根据自己实验而定
+    # remove isolated nodes，即去掉和所有otu均无相关性的otu 可省略，前期矩阵已处理过
+    bad.vs <- V(igraph)[degree(igraph) == 0]
+    igraph <- delete.vertices(igraph, bad.vs)
+    igraph
+  }
+  
+  #注意spracc出来结果怎么是开头带有# 的，注意去除
+  igraph<-matrix2igraph(r.threshold,p.threshold)
+  igraph
+  
+  ##必须去除边的权重，否则会出现错误
+igraph.weight <- E(igraph)$weight# 将igraph weight属性赋值到igraph.weight,用于后边做图
+E(igraph)$weight <- NA
+netpro_result<-net_pro(igraph)
+colnames(netpro_result)<-layout
+  
+  
+# random null model
+rand.g<- erdos.renyi.game(length(V(igraph)), length(E(igraph)),type = c("gnm"))
+
+
+plot(degree_distribution(igraph, cumulative = FALSE),col="red",cex=1.5,cex.axis=1,xlab="Degree",ylab="Relative frequency",main=paste("The distribution of degree for co-occurrence network",layout,sep = "_"))
+points(degree_distribution(rand.g, cumulative = FALSE),col="blue",cex=1.5,type="p")
+legend("topright",c("Co-occurrence network","Erdős–Rényi network"),col=c("red","blue"),pch=1,cex=1, box.col = "white")
+
+# node_pro:自定义函数，提供需要计算网络性质的igraph对象，结果返回计算好的节点性质
+nodepro_result<-node_pro(igraph)
+head(nodepro_result)
+filename2 <- paste(e,"/igraph.node.pro",layout,d,".csv",sep = "")
+write.csv(nodepro_result,filename2)
+
+
+rand.g.netpro_result<-c()
+for (i in 1:1000){
+  #####random null model
+  rand.g<- erdos.renyi.game(length(V(igraph)), length(E(igraph)),type = c("gnm"))
+  tem_netpro_result<-net_pro(rand.g)
+  rand.g.netpro_result<-cbind(rand.g.netpro_result,tem_netpro_result)
+} 
+
+write.csv(rand.g.netpro_result,paste(e,"/rand.g.1000.result",layout,d,".csv",sep = ""))
+
+# 对随机矩阵结果求均值和sd值
+result_summary<-cbind(rowMeans(rand.g.netpro_result),apply(rand.g.netpro_result,1,sd))
+colnames(result_summary)<-c("Means","SD")
+sum_net = cbind(netpro_result,result_summary)
+head(sum_net,n = 20L)
+filename3 <- paste(e,"/rand.g.1000.result_summary",layout,d,".csv",sep = "")
+
+write.csv(sum_net,filename3)
+  
+  
+  
+  
+}
+
+dev.off()
+
+
+```
+
+
+
+
+
+### 高，中，低丰度OTU网络相关关系确定及其可视化
+
+这部分代码跑三遍
+
+
+```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+# i = "H"
+# i = "M"
+# i = "L"
+
+for (i in c("H","M","L")) {
+  
+  if(i == "H"){  
+    d = "H"
+r.threshold=0.8
+p.threshold=0.05   }
+  if(i == "M"){ 
+    d = "M"
+r.threshold=0.6
+p.threshold=0.05}
+  if(i == "L"){ 
+   d = "L"
+r.threshold=0.4
+p.threshold=0.05}
+  
+
+y = matrix(1:2409,nrow = 14,ncol = length(unique(design$SampleType)))
+e = paste("network_results_",d,sep = "")
+dir.create(e)
+plotname <- paste(e,"/co-occurrence_net",".pdf",sep = "")
+
+pdf(file = plotname,width = 60,height = 40)
+par(mfrow=c(xaxa,2), mar=c(1,1,1,1))
+# layouts = c("H_bulk","D_bulk")
+
+# layout = "H_bulk"
+for (layout in layouts) {
+  
+  print(layout)
+  treat = paste("net_3_2_H",layout,sep = "")
+  # ps1 = readRDS("..//ps7.rds")
+  ps1 <- prune_samples(sample_sums(ps) >=500,ps);ps1
+  b = ps1
+  c = layouts
+  # d = "H"
+  # e = paste("network_results",d,sep = "")
+  
+  library("phyloseq")
+  ## 基本参数设置
+  # 存储otu-sample矩阵的文件名
+  otu_sample_file <- paste("./data/",layout,"_",d,"_net",".txt",sep = "")
+  # sparcc cor 文件
+  r_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/basis_corr/cor_sparcc.out",sep = "")
+  # sparcc p-value 文件
+  p_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/pvals/pvals_two_sided.txt",sep = "")
+  
+  # ps1 = readRDS("../ps1.rds")
+  # design = as.data.frame(sample_data(ps1))
+  # map1<-design[grep(c,row.names(design)),]
+  # dim(map1)
+  # a <- subset_samples(ps1,X.SampleID %in% map1$X.SampleID)
+  # a = filter_taxa(a, function(x) sum(x ) > 1 , TRUE)#筛选序列数量大于1的
+  # 
+  # 
+  # b  = transform_sample_counts(a, function(x) x / sum(x) )
+  # b = filter_taxa(b, function(x) mean(x) > 0.0005, TRUE);a###0.001
+  
+  
+  # 设定构建网络的r和p阈值
+
+  # 调整vertex大小
+  size=2
+  # 设定节点颜色所采用的信息列，如otu.tax8第二列Phylum
+  gcol=2
+  # 设定节点颜色所显示分类群的最大个数
+  maxtaxnum=5
+  # 设定节点标签所采用的信息列，如taxonomy.txt第二列Phylum
+  glab=3
+  
+  
+  # 文件读取
+  otu <- read.delim(otu_sample_file,row.names=1)
+  head(otu)
+  # 转置otu表
+  otu <-t(otu)
+  dim(otu)
+  # 读取r值矩阵
+  r_sparcc <- read.table(r_sparcc_file,row.names=1)
+  # str(r_sparcc)
+  r_sparcc = as.matrix(r_sparcc)
+  # 读取p值矩阵
+  p_sparcc <- read.table(p_sparcc_file,row.names=1)
+  # str(p_sparcc)
+  p_sparcc  = as.matrix(p_sparcc)
+  
+  #本函数讲spracc对象转换为igraph对象并构建网络
+  # 矩阵到igraph对象的转换（封装到自定义函数中）
+  # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+  library("igraph")
+  matrix2igraph<-function(r.threshold,p.threshold){
+    
+    occor.p<-as.matrix(p_sparcc)
+    ##R值
+    occor.r<-as.matrix(r_sparcc)
+    # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+    occor.r[occor.p>p.threshold|abs(occor.r)<r.threshold] = 0 
+    
+    # 构建igraph对象构建邻接矩阵
+    igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=TRUE,diag=FALSE)
+    igraph
+    # NOTE:可以设置weighted=NULL,但是此时要注意此函数只能识别相互作用矩阵内正整数，所以应用前请确保矩阵正确。
+    # 可以按下面命令转换数据
+    # occor.r[occor.r!=0] <- 1
+    # igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=NULL,diag=FALSE)
+    
+    # 是否去掉孤立顶点，根据自己实验而定
+    # remove isolated nodes，即去掉和所有otu均无相关性的otu 可省略，前期矩阵已处理过
+    # bad.vs <- V(igraph)[degree(igraph) == 0]
+    # igraph <- delete.vertices(igraph, bad.vs)
+    # igraph
+  }
+  
+  #注意spracc出来结果怎么是开头带有# 的，注意去除
+  igraph<-matrix2igraph(r.threshold,p.threshold)
+  igraph
+
+  
+  
+  ## 网络图相关参数修改包括边的颜色：E(igraph)$color
+  
+  ###网络边的赋值及其设置
+  igraph.weight <- E(igraph)$weight# 将igraph weight属性赋值到igraph.weight,用于后边做图
+  E(igraph)$weight <- NA
+  # igraph<-remove.edge.attribute(igraph,"weight")#把边值删除
+  netpro_result<-net_pro(igraph)
+  colnames(netpro_result)<-layout
+  y = as.data.frame(y)
+  colnames(y) = layouts
+  # head(y)
+  y[layout] = netpro_result[,1]
+  row.names(y) = row.names(netpro_result)
+  y
+  # 按相关类型设置边颜色
+  # 如果构建网络时，weighted=NULL,此步骤不能统计
+  sum(igraph.weight>0)# number of postive correlation
+  sum(igraph.weight<0)# number of negative correlation
+  
+  # set edge color，postive correlation 设定为red, negative correlation设定为blue
+  E.color <- igraph.weight
+  E.color <- ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+  E(igraph)$color <- as.character(E.color)
+  
+  
+  # 创建存放结果文件夹
+  # dir.create(e)
+  
+  ###改变网络节点边框宽度
+  mycircle <- function(coords, v=NULL, params) {
+    vertex.color <- params("vertex", "color")
+    if (length(vertex.color) != 1 && !is.null(v)) {
+      vertex.color <- vertex.color[v]
+    }
+    vertex.size  <- 1/200 * params("vertex", "size")
+    if (length(vertex.size) != 1 && !is.null(v)) {
+      vertex.size <- vertex.size[v]
+    }
+    vertex.frame.color <- params("vertex", "frame.color")
+    if (length(vertex.frame.color) != 1 && !is.null(v)) {
+      vertex.frame.color <- vertex.frame.color[v]
+    }
+    vertex.frame.width <- params("vertex", "frame.width")
+    if (length(vertex.frame.width) != 1 && !is.null(v)) {
+      vertex.frame.width <- vertex.frame.width[v]
+    }
+    
+    mapply(coords[,1], coords[,2], vertex.color, vertex.frame.color,
+           vertex.size, vertex.frame.width,
+           FUN=function(x, y, bg, fg, size, lwd) {
+             symbols(x=x, y=y, bg=bg, fg=fg, lwd=lwd,
+                     circles=size, add=TRUE, inches=FALSE)
+           })
+  }
+  
+  add.vertex.shape("fcircle", clip=igraph.shape.noclip,
+                   plot=mycircle, parameters=list(vertex.frame.color=1,
+                                                  vertex.frame.width=1))
+  
+  
+  
+  
+  l <- layout_nicely(igraph)
+  # layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1] 
+  # layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+  # layouts
+  l <- norm_coords(l, ymin=-1, ymax=1, xmin=-1, xmax=1)
+  
+  set.seed(123)
+  #节点颜色代表门，节点大小代表平均丰度，连线颜色代表正负相关
+  plot(igraph,main=paste(layout, "network",sep = ""), 
+       layout=l,
+       vertex.shape="fcircle", 
+       # vertex.frame.color="white",
+       vertex.label=NA ,
+       vertex.frame.color="#984EA3",
+       vertex.color="#984EA3",
+       vertex.size =2,
+       vertex.frame.alpha =0.5,
+       edge.width=0.5,
+       edge.lty=2,
+       edge.curved=F,
+       margin=c(0,0,0,0)
+       #vertex.frame.width=5
+  )
+  
+  
+  # legend(1,1, legend=otu.tax.levels,col=levels(node.col), pch=19,cex=1,bty="n")
+  legend(1,1.5, legend=c("pos.cor","neg.cor"),col=c("red","blue"),lty=1,lwd=2, bty="n",cex=1)
+}
+
+dev.off()
+tablename <- paste(e,"/co-occurrence_net_net_pro",".csv",sep = "")
+write.csv(y,tablename)
+  
+}
+
+
+
+```
+
+
+
+
+### 高，中，低丰度OTU网络整体属性，节点属性，以及0模型构建，是否不同于随机网络
+
+这部分代码跑三遍，和出图的一样
+1. 将度分布制作到一张图上
+```{r network pro, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+for (i in c("H","M","L")) {
+  
+   if(i == "H"){  
+    d = "H"
+r.threshold=0.8
+p.threshold=0.05   }
+  if(i == "M"){ 
+    d = "M"
+r.threshold=0.6
+p.threshold=0.05}
+  if(i == "L"){ 
+   d = "L"
+r.threshold=0.5
+p.threshold=0.05}
+  
+
+y = matrix(1:2409,nrow = 14,ncol = length(unique(design$SampleType)))
+e = paste("network_results_",d,sep = "")
+# dir.create(e)
+plotname <- paste(e,"/co-occurrence_network_degree_distribution_",".pdf",sep = "")
+pdf(file = plotname,width = 18,height = 12)
+par(mfrow=c(xaxa,2), mar=c(1,1,1,1))
+# layouts = c("H_bulk","H_rhi","D_bulk","D_rhi")
+# layout = "H_bulk"
+for (layout in layouts) {
+  
+  print(layout)
+  # treat = paste("net_3_2_H",layout,sep = "")
+  # ps1 = readRDS("..//ps6.rds")
+  ps1 <- prune_samples(sample_sums(ps) >=500,ps);ps1
+  b = ps1
+  c = layouts
+  # d = "H"
+  # e = paste("network_results",d,sep = "")
+  
+  library("phyloseq")
+  ## 基本参数设置
+  # 存储otu-sample矩阵的文件名
+  otu_sample_file <- paste("./data/",layout,"_",d,"_net",".txt",sep = "")
+  # sparcc cor 文件
+  r_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/basis_corr/cor_sparcc.out",sep = "")
+  # sparcc p-value 文件
+  p_sparcc_file<-paste("sparcc_net_result_matrix/",layout,"_",d,"/pvals/pvals_two_sided.txt",sep = "")
+  
+  # ps1 = readRDS("../ps1.rds")
+  # design = as.data.frame(sample_data(ps1))
+  # map1<-design[grep(c,row.names(design)),]
+  # dim(map1)
+  # a <- subset_samples(ps1,X.SampleID %in% map1$X.SampleID)
+  # a = filter_taxa(a, function(x) sum(x ) > 1 , TRUE)#筛选序列数量大于1的
+  # 
+  # 
+  # b  = transform_sample_counts(a, function(x) x / sum(x) )
+  # b = filter_taxa(b, function(x) mean(x) > 0.0005, TRUE);a###0.001
+  
+  
+  # 设定构建网络的r和p阈值
+
+  # 调整vertex大小
+  size=2
+  # 设定节点颜色所采用的信息列，如otu.tax8第二列Phylum
+  gcol=2
+  # 设定节点颜色所显示分类群的最大个数
+  maxtaxnum=5
+  # 设定节点标签所采用的信息列，如taxonomy.txt第二列Phylum
+  glab=3
+  
+  
+  # 文件读取
+  otu <- read.delim(otu_sample_file,row.names=1)
+  head(otu)
+  # 转置otu表
+  otu <-t(otu)
+  dim(otu)
+  # 读取r值矩阵
+  r_sparcc <- read.table(r_sparcc_file,row.names=1)
+  # str(r_sparcc)
+  r_sparcc = as.matrix(r_sparcc)
+  # 读取p值矩阵
+  p_sparcc <- read.table(p_sparcc_file,row.names=1)
+  # str(p_sparcc)
+  p_sparcc  = as.matrix(p_sparcc)
+  
+  #本函数讲spracc对象转换为igraph对象并构建网络
+  # 矩阵到igraph对象的转换（封装到自定义函数中）
+  # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+  library("igraph")
+  matrix2igraph<-function(r.threshold,p.threshold){
+    
+    occor.p<-as.matrix(p_sparcc)
+    ##R值
+    occor.r<-as.matrix(r_sparcc)
+    # 确定物种间存在相互作用关系的阈值，将相关性R矩阵内不符合的数据转换为0
+    occor.r[occor.p>p.threshold|abs(occor.r)<r.threshold] = 0 
+    
+    # 构建igraph对象构建邻接矩阵
+    igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=TRUE,diag=FALSE)
+    igraph
+    # NOTE:可以设置weighted=NULL,但是此时要注意此函数只能识别相互作用矩阵内正整数，所以应用前请确保矩阵正确。
+    # 可以按下面命令转换数据
+    # occor.r[occor.r!=0] <- 1
+    # igraph <- graph_from_adjacency_matrix(occor.r,mode="undirected",weighted=NULL,diag=FALSE)
+    
+    # 是否去掉孤立顶点，根据自己实验而定
+    # remove isolated nodes，即去掉和所有otu均无相关性的otu 可省略，前期矩阵已处理过
+    # bad.vs <- V(igraph)[degree(igraph) == 0]
+    # igraph <- delete.vertices(igraph, bad.vs)
+    # igraph
+  }
+  
+  #注意spracc出来结果怎么是开头带有# 的，注意去除
+  igraph<-matrix2igraph(r.threshold,p.threshold)
+  igraph
+
+  ## 网络图相关参数修改包括边的颜色：E(igraph)$color
+  
+  ###网络边的赋值及其设置
+  igraph.weight <- E(igraph)$weight# 将igraph weight属性赋值到igraph.weight,用于后边做图
+  E(igraph)$weight <- NA
+ 
+  # random null model
+  rand.g<- erdos.renyi.game(length(V(igraph)), length(E(igraph)),type = c("gnm"))
+  
+  
+  plot(degree_distribution(igraph, cumulative = FALSE),col="red",cex=1.5,cex.axis=1,xlab="Degree",ylab="Relative frequency",main=paste("The distribution of degree for co-occurrence network",layout,sep = "_"))
+  points(degree_distribution(rand.g, cumulative = FALSE),col="blue",cex=1.5,type="p")
+  legend("topright",c("Co-occurrence network","Erdős–Rényi network"),col=c("red","blue"),pch=1,cex=1, box.col = "white")
+  
+  # node_pro:自定义函数，提供需要计算网络性质的igraph对象，结果返回计算好的节点性质
+  nodepro_result<-node_pro(igraph)
+  head(nodepro_result)
+  filename2 <- paste(e,"/igraph.node.pro",layout,d,".csv",sep = "")
+  write.csv(nodepro_result,filename2)
+  
+  
+  rand.g.netpro_result<-c()
+  for (i in 1:1000){
+    #####random null model
+    rand.g<- erdos.renyi.game(length(V(igraph)), length(E(igraph)),type = c("gnm"))
+    tem_netpro_result<-net_pro(rand.g)
+    rand.g.netpro_result<-cbind(rand.g.netpro_result,tem_netpro_result)
+  } 
+  
+  write.csv(rand.g.netpro_result,paste(e,"/rand.g.1000.result",layout,d,".csv",sep = ""))
+  
+  # 对随机矩阵结果求均值和sd值
+  result_summary<-cbind(rowMeans(rand.g.netpro_result),apply(rand.g.netpro_result,1,sd))
+  colnames(result_summary)<-c("Means","SD")
+  sum_net = cbind(netpro_result,result_summary)
+  head(sum_net,n = 20L)
+  filename3 <- paste(e,"/rand.g.1000.result_summary",layout,d,".csv",sep = "")
+  
+  write.csv(sum_net,filename3)
+  
+}
+
+dev.off()
+  
+}
+
+ 
+
+
+```
+
+
+### 等待使用网络分析之前
+
+```{R eval=FALSE, include=FALSE}
+#注意使用原始coun丰度文件
+library("phyloseq")
+ps = readRDS("../a3_DADA2_table//ps.rds")
+ps = filter_taxa(ps, function(x) sum(x ) > 50 , TRUE);ps
+# ps1 <- prune_samples(sample_sums(ps) >=500,ps);ps1
+ps1 = filter_taxa(ps1, function(x) sum(x ) > 0 , TRUE)#去除全部为0的otu
+ps1
+
+for (i in 1:length(aa)) {
+  
+  
+  design = as.data.frame(sample_data(ps1))
+  colnames(design)[1] = "ID"
+  sample_data(ps1) = design
+
+  # map1<-design[grep(aa[i],design$SampleType),]
+  map1<- subset(design,SampleType==aa[i])
+  
+  dim(map1)
+  ps_sub <- subset_samples(ps1,ID %in% map1$ID)
+  ps_sub = filter_taxa(ps_sub, function(x) sum(x ) > 1 , TRUE)#筛选序列数量大于1的
+  ps_sub
+  filename = paste("./data/",aa[i],"_all_","net.txt",sep = "")
+  write.table(as.data.frame(t(vegan_otu(ps_sub))),filename,sep = "\t",col.names =NA)
+              
+              ###高丰度为外分之五以上
+              ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+              ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) > value1, TRUE);
+              ps_sub_re
+              
+              netH = otu_table(ps_sub)[,colnames(otu_table(ps_sub_re))]
+              dim(netH)
+              
+              filename = paste("./data/",aa[i],"_H_","net.txt",sep = "")
+              write.table(as.data.frame(t(netH)),filename,sep = "\t",col.names =NA)
+              
+              
+              
+              ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+              ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) < value2, TRUE)
+              ps_sub_re
+              netL  = otu_table(ps_sub)[,colnames(otu_table(ps_sub_re))]
+              dim(netL)
+              filename = paste("./data/",aa[i],"_L_","net.txt",sep = "")
+              write.table(as.data.frame(t(netL)),filename,sep = "\t",col.names =NA)
+              
+              
+              ps_sub_re  = transform_sample_counts(ps_sub, function(x) x / sum(x) )
+              ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) < value1, TRUE)
+              ps_sub_re = filter_taxa(ps_sub_re, function(x) mean(x) > value2, TRUE)
+              ps_sub_re
+              netM  = otu_table(ps_sub)[,colnames(otu_table(ps_sub_re))]
+              dim(netM)
+              filename = paste("./data/",aa[i],"_M_","net.txt",sep = "")
+              write.table(as.data.frame(t(netM)),filename,sep = "\t",col.names =NA)
+}
+
+
+
+```
+
+
