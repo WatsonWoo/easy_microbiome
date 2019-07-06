@@ -4,4 +4,6 @@
 下面是我的分析习惯所形成的一整套体系：
 
 95%基于R语言的全套扩增子数据处理和下游分析流程。
+
+![image](https://github.com/taowenmicro/easy_microbiome/blob/master/phyloseq_pipline_5_tax_tree/tax_fal1.png?raw=true)
  
