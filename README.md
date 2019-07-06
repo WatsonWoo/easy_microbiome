@@ -5,5 +5,6 @@
 
 95%基于R语言的全套扩增子数据处理和下游分析流程。
 
-![image](https://github.com/taowenmicro/easy_microbiome/blob/master/phyloseq_pipline_5_tax_tree/tax_fal1.png?raw=true)
- 
+![image](https://note.youdao.com/yws/public/resource/57d6024c2188aff0d6d7486fa656d6de/xmlnote/917BD4C162084AE3B7411660A55FFDFD/10502)
+
+![image2](https://note.youdao.com/yws/public/resource/57d6024c2188aff0d6d7486fa656d6de/xmlnote/732D2B5EFBE94CF58FC7BFBFE74652EE/10492)
