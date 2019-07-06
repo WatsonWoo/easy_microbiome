@@ -1,0 +1,416 @@
+---
+title: "phy_beta"
+author: "wentao"
+date: "2019年4月15日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## 分析前准备
+```{r value tu pick, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+#清空内存#######
+rm(list=ls()) 
+#堆叠柱状图参数设置
+#a为输出文件主名
+a <- "beta"
+path = "./phyloseq_3-2_beta_diversity/"
+dir.create(path)
+# mi=c("#CBD588", "#599861", "orange","#DA5724", "#508578", "#CD9BCD",
+#                                     "#AD6F3B", "#673770","#D14285", "#652926", "#C84248", 
+#                                     "#8569D5", "#5E738F","#D1A33D", "#8A7C64","black")
+mi=c("#1B9E77" ,"#D95F02", "#7570B3","#E7298A","#E6AB02", "#B3DE69")
+# path = "./phyloseq_4_beta_diversity/"
+dir.create(path)
+```
+
+
+
+
+```{r pre alpha and beta, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("phyloseq")
+library("ggplot2")
+library("dada2")
+library("tidyverse")
+library("plyr"); packageVersion("plyr")
+library("vegan")
+library("ggpubr") 
+library("scales")
+library(microbiomeSeq)
+
+
+mythemeBETA <-  theme_bw()+
+  
+  theme(
+    panel.grid.major=element_blank(),
+    panel.grid.minor=element_blank(),
+    
+    plot.title = element_text(vjust = -8.5,hjust = 0.1),
+    axis.title.y =element_text(size = 24,face = "bold",colour = "black"),
+    axis.title.x =element_text(size = 24,face = "bold",colour = "black"),
+    axis.text = element_text(size = 20,face = "bold"),
+    axis.text.x = element_text(colour = "black",size = 14),
+    axis.text.y = element_text(colour = "black",size = 14),
+    legend.text = element_text(size = 15,face = "bold")
+    #legend.position = "none"#是否删除图例
+    
+  ) 
+
+```
+
+## 导入数据 处理数据
+
+
+```{r imput phyloseq data, echo=TRUE, message=FALSE, warning=FALSE}
+## 导入数据
+ps = readRDS("./a3_DADA2_table//ps.rds")
+ps
+ps1 = ps
+
+```
+
+
+
+### beta多样性分析
+这部分的分析我分为三个内容：
+1. 挑选合适的距离进行排序分析
+2. 对群落差异选择合适的方法进行显著性检验
+3. 对分组之间两两进行显著性检验
+
+#### 下面使用多种排序方法进行排序，并比对
+
+使用llply函数（为了减少演示时间，抽取序列）
+```{r 下面使用多种排序方法进行排序，并比对, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ps1 = filter_taxa(ps1, function(x) sum(x ) > 100, TRUE);ps1
+# ps1 <- prune_samples(sample_sums(ps1) >=2000,ps1);ps1
+
+physeq = transform_sample_counts(ps1, function(x) 1E6 * x/sum(x))
+
+
+##多种距离以供选择
+dist = "bray"
+# dist = "unifrac"
+# dist = "wunifrac"
+# dist = "dpcoa"
+# dist = "jsd"
+
+ord_meths = c("DCA", "CCA", "RDA", "DPCoA", "NMDS", "MDS", "PCoA")
+plist = llply(as.list(ord_meths), function(i, physeq, dist){
+        ordi = ordinate(physeq, method=i, distance=dist)
+        plot_ordination(physeq, ordi, "samples", color="SampleType")
+}, physeq, dist)
+```
+### 提取作图所需数据
+
+
+```{r 提取作图所需数据1, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+names(plist) <- ord_meths
+pdataframe = ldply(plist, function(x){
+    df = x$data[, 1:2]
+    colnames(df) = c("Axis_1", "Axis_2")
+    return(cbind(df, x$data))
+})
+names(pdataframe)[1] = "method"
+```
+
+### 可视化多种排序结果，方便挑选合适排序方法
+```{r plot ori1, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p = ggplot(pdataframe, aes(Axis_1, Axis_2, color=SampleType, shape=SampleType, fill=SampleType))
+p = p + geom_point(size=4) + geom_polygon()
+p = p + facet_wrap(~method, scales="free")
+p = p + scale_fill_brewer(type="qual", palette="Set1")
+p = p + scale_colour_brewer(type="qual", palette="Set1")
+p = p +mythemeBETA
+
+plotname = paste(path,"beta_all_method.pdf")
+ggsave(plotname, p, width = 12, height =12)
+
+```
+##microbiomeSeq包进行排序
+选择排序方法和距离做排序分析，同时差异检验和两组之间差异检验
+
+```{r plot ori111, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+
+
+###使用microbiomeSeq包完成完成排序分析和差异比较同时比对两组之间的差异
+library("grid")
+library("gridExtra")
+
+ord.res <- ordination(ps1, which_distance = "bray", method = "NMDS", grouping_column = "SampleType", 
+                      pvalue.cutoff = 0.05)
+
+p <- plot.ordination(ord.res, method = "NMDS",  show.pvalues = T)
+print(p)
+
+##提取差异比较结果
+ado = ord.res[[3]]
+a = round(as.data.frame(ado$aov.tab[5])[1,1],3)
+R2 <- paste("adonis:R ",a, sep = "")
+b = as.data.frame(ado$aov.tab[6])[1,1]
+p_v = paste("p: ",b, sep = "")
+adoni_all= paste(R2," ",p_v, sep = "")
+adoni_all
+
+
+#提取两两比较的差异结果
+pair_grodif = as.data.frame(ord.res[[2]])
+
+
+```
+
+
+
+### 基于群落做差异分析一般有三种方法
+基于群落做差异分析，使用三种方法进行总体差异分析和两组之间差异分析
+
+```{r name12, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+
+### 群落差异分析基于距离矩阵，所以需要指定需要使用的距离
+distan_method = "bray"
+# distan_method = "jaccard"
+##如果不够满意，下面这几十种距离可以选择
+#"manhattan", "euclidean", "canberra", "clark", "bray", "kulczynski", "jaccard", "gower",
+#"altGower", "morisita", "horn", "mountford", "raup", "binomial", "chao", "cao" or "mahalanobis"
+
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+
+fg.dat = as.data.frame(t(vegan_otu(ps1)))
+list.dat = as.data.frame(sample_data(ps1))
+head(fg.dat)
+first.group = list.dat$SampleType
+grp1 = unique(first.group);grp1
+
+fg.dat2 = fg.dat
+fg.dat2[is.na(fg.dat2)] = 0
+sample = colnames(fg.dat2)
+
+#=======================================================
+# for Dissimilarity test among group1
+grp<-list()
+# i = 2
+for (i in c(1:length(grp1))){
+  a<-as.vector(grp1[[i]])  ##组名
+  grp[[i]]<-rownames(list.dat)[which(first.group==a)]
+}
+grp
+names(grp)<-grp1 ; names(grp)
+samp<-colnames(fg.dat2) ; samp
+mrpp.re = matrix(0, nrow=length(grp), ncol=length(grp))
+ado.re = matrix(0, nrow=length(grp), ncol=length(grp))
+ano.re = matrix(0, nrow=length(grp), ncol=length(grp))
+
+for (x in c(1:(length(grp)-1))) {
+  for(y in c((x+1):length(grp))){
+    list1 = grp[[x]]
+    list2 = grp[[y]]
+    
+    # ?pmatch.pmatch(x, table) 
+    col1 = pmatch(list1, samp)  ##在samp中找出list1对应的列
+    col2 = pmatch(list2, samp)
+    grp.list = c(rep(as.vector(grp1[[x]]),length(list1)),rep(as.vector(grp1[[y]]), length(list2)))
+    dat = fg.dat2[, c(col1, col2)]#得到分组对应的otu文件
+    #====cut empty row====#原来otu表格去子集之后就存在部分Otu是0的情况，此时去掉这些otu
+    sum1 = rowSums(dat, na.rm=T) 
+    valid.row = which(sum1 > 0)
+    #=====================
+    dat = dat[valid.row,]
+    dat[is.na(dat)] = 0
+    dat1 = t(dat)  #注意转置
+    dat.dist = vegdist(dat1, method = distan_method,binary=TRUE)
+    
+    
+    dat.mrpp = mrpp(dat.dist, grp.list)  
+    #str(dat.mrpp)
+    mrpp.re[x, y] = dat.mrpp$Pvalue   #上三角是P
+    mrpp.re[y, x] = dat.mrpp$delta  #下三角是特征
+    
+    
+    dat.ano = anosim(dat.dist, grp.list) #bray
+    ano.re[x, y] = dat.ano$signif  #上三角是p值
+    ano.re[y, x] = dat.ano$statistic#下三角是R值
+    
+    
+    grp.vector = list(V1 = grp.list)
+    dat.ado = adonis(dat1 ~ V1, data=grp.vector, method = distan_method,binary=TRUE)
+    ado.re[y, x] = dat.ado$aov.tab[1,4]#F.Model值大小，并不是R值
+    ado.re[x, y] = dat.ado$aov.tab[1,6] #R值
+  }
+}
+colnames(mrpp.re) = rownames(mrpp.re) <- grp1
+mrpp.re
+colnames(ado.re) = rownames(ado.re) <- grp1
+ado.re
+colnames(ano.re) = rownames(ano.re) <- grp1
+ano.re
+
+
+write.table(mrpp.re,file=paste(path,"mrpp.txt",sep = ""),sep="\t",col.names=NA)
+write.table(ado.re,file=paste(path,"adonis.txt",sep = ""),sep="\t",col.names=NA)
+write.table(ano.re,file=paste(path,"anosim.txt",sep = ""),sep="\t",col.names=NA)
+
+#===============================================================
+# do dissimilarity for whole dataset based on the grp1 grouping profile
+fg.dat2<-fg.dat2[,as.vector(unlist(grp))]
+fg.dat2[is.na(fg.dat2)] = 0
+grp.list = c()
+
+for(i in 1:length(grp)){
+  grp.list = c(grp.list, rep(paste("grp",i,sep=""),length(grp[[i]])))
+}
+grp.list
+
+report=c()
+grp.vector = list(V1 = grp.list)
+
+dat.dist = vegdist(t(fg.dat2), method = distan_method, binary=TRUE) #"bray"
+
+dat.mrpp = mrpp(dat.dist, grp.list) 
+dat.ano = anosim(dat.dist, grp.list) 
+dat.ado = adonis(t(fg.dat2) ~ V1, data=grp.vector, method = distan_method, binary=TRUE)
+#dat.ado = adonis(t(fg.dat2) ~ V1, data=grp.vector, method = "bray")
+
+report = cbind(report, c(dat.mrpp$delta, dat.mrpp$Pvalue, dat.ano$statistic, dat.ano$signif, dat.ado$aov.tab[1,4], dat.ado$aov.tab[1,6]))
+rownames(report) <- c("MRPP.delta","MRPP.P","ANOSIM.r","ANOSIM.P","PERMANOVA.F","PERMANOVA.P")
+colnames(report) = "Whole dataset"
+report
+write.table(report,file=paste(path,"whole_group.txt",sep = ""),sep="\t",col.names = NA)
+
+
+
+```
+
+
+
+
+
+### 选择一种距离，选择一种排序，选择一种显著性检验方法
+```{r pl11t ori1, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+##选择合适的距离和差异检测方法
+fia_dist = "unifrac"
+choise_dist = "MRPP"
+# diff_method = ("MRPP","ANOSIM","PERMANOVA")
+
+```
+
+```{r beta orig111111, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+
+
+ps1_rela  = transform_sample_counts(ps, function(x) x / sum(x) );ps1_rela 
+unif <- distance(ps1_rela , method= fia_dist, type="samples")
+#这里请记住pcoa函数
+pcoa = cmdscale(unif, k=2, eig=T) # k is dimension, 3 is recommended; eig is eigenvalues
+
+points = as.data.frame(pcoa$points) # 获得坐标点get coordinate string, format to dataframme
+colnames(points) = c("x", "y") #命名行名
+eig = pcoa$eig
+#eig特征值得到
+sub_design = as.data.frame(sample_data(ps1_rela))
+points = cbind(points, sub_design[match(rownames(points), rownames(sub_design)), ])
+#write.table(points,"pcoa_bray_curtis.txt",quote = FALSE,row.names = F,
+#           col.names = T,sep = "\t")
+head(points)
+if (choise_dist == "MRPP") {
+  i = 1
+}
+if (choise_dist == "ANOSIM") {
+  i = 3
+}
+if (choise_dist == "PERMANOVA") {
+  i = 5
+}
+
+
+R2 <- paste(row.names(report)[i],":",round(report[i,],3), sep = " ")
+R2 
+p_v = paste(row.names(report)[i+1],":",round(report[i+1,],3), sep = " ")
+p_v
+title = paste(R2," ",p_v, sep = "")
+title
+
+
+
+p2 <-ggplot(points, aes(x=x, y=y, fill = SampleType)) +
+  geom_point(alpha=.7, size=5, pch = 21) +
+  labs(x=paste("PCoA 1 (", format(100 * eig[1] / sum(eig), digits=4), "%)", sep=""),
+       y=paste("PCoA 2 (", format(100 * eig[2] / sum(eig), digits=4), "%)", sep=""),
+       title=title)+
+  stat_ellipse( linetype = 2,level = 0.65,aes(group  =SampleType, colour =  SampleType))+
+  #stat_ellipse( linetype = 1,level = 0.8)+
+  #geom_text_repel(aes(label=points$id),size=4)+
+  scale_colour_manual(values = mi,guide = guide_legend(title = NULL))+
+  scale_fill_manual(values = mi,guide = guide_legend(title = NULL))+
+  #labs(title = "toamto hea and dis")+
+  guides(color=guide_legend(title = NULL),shape=guide_legend(title = NULL)) 
+# p2
+# points$id=row.names(points)
+# p+geom_text(aes(label=points$id),size=4)#?stat_ellipse
+p2 = p2+ mythemeBETA
+p2
+
+# head(points)
+# points$id=row.names(points)
+# p2+geom_text(aes(label=points$id),size=4)
+plotname = paste(path,fia_dist,choise_dist,".pdf")
+ggsave(plotname, p2, width = 12, height = 8)
+
+
+```
+
+### 基于多个分组的数据可能需要做多因素置换检验
+
+
+
+```{r name232, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+head(list.dat)
+list.dat$SampleType2 = rep(c("A","B"),1)
+first.group = list.dat$SampleType
+grp1 = unique(first.group) ;grp1
+second.group = list.dat$SampleType2
+grp2 = unique(second.group) ;grp2
+
+sample = colnames(fg.dat2)
+
+
+fg.dat2 = fg.dat
+head(fg.dat2)
+
+# for adonis,dissimilarity between group1 and 2
+list.dat.inter = list(V1=list.dat$SampleType,V2=list.dat$SampleType2)
+dat.ado = adonis(t(fg.dat2) ~ V1*V2, data=list.dat.inter, method = "jaccard", binary = T) 
+dat.ado
+
+```
+
+<!-- ```{r name, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r name, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r name, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+
+
+
