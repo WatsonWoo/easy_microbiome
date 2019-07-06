@@ -1,0 +1,16 @@
+title	16S rep set tree
+clade_marker_size	0.1
+title_font_size	12
+start_rotation	360
+total_plotted_degrees	340
+class_legend_font_size	9
+annotation_background_width	0.03
+annotation_background_alpha	0.03
+annotation_font_size	3
+annotation_legend_font_size	9
+branch_thickness	2
+clade_marker_edge_width	1
+clade_marker_size	15
+clade_separation	0.2
+annotation_background_separation	-0.001
+annotation_background_offset	-0.001
