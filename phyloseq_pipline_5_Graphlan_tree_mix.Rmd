@@ -1,0 +1,746 @@
+---
+title: "phyloseq_pipline_5_Graphlan_tree_mix"
+author: "wentao"
+date: "2019年7月5日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## graphlan是python工具，我们运行
+我们构建门类树，要做一下几个方面准备：
+1. 确定构建哪个等级的门类树，并构建核心树文件；
+
+这里我们构建的OTU水平的门类树，下面提供构建树文件方法和代码，直接输出无需修改；
+```{r cpre, message=FALSE, warning=FALSE}
+library("phyloseq")
+
+ps = readRDS("./a3_DADA2_table//ps.rds")
+ps
+
+# ps = filter_taxa(ps, function(x) sum(x ) > 1 , TRUE)
+# ps
+# mapping = as.data.frame(sample_data(ps))
+
+
+path = "./phyloseq_pipline_5_tax_tree"
+dir.create(path)
+# setwd(path)
+ps0 <- ps
+
+# taxGlomRank = "Genus"
+# ps_Genus = tax_glom(ps, taxrank = taxGlomRank)
+
+mapping = as.data.frame(sample_data(ps))
+ps_Genus = ps0
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+otu_table = as.data.frame(t(vegan_otu(ps_Genus)))
+
+vegan_tax <-  function(physeq){
+  tax <-  tax_table(physeq)
+  
+  return(as(tax,"matrix"))
+}
+tax_table = as.data.frame(vegan_tax(ps_Genus))
+
+
+
+
+# OTU_name = paste(tax_table$Kingdom,tax_table$Phylum,tax_table$Class,tax_table$Order,tax_table$Family,
+#                  tax_table$Genus,sep = ".")
+# head(OTU_name)
+# row.names(tax_table) = OTU_name
+
+head(tax_table)
+
+head(otu_table)
+
+otu_tax = merge(otu_table,tax_table,by = "row.names",all = F)
+dim(otu_tax)
+
+if (length(colnames(tax_table(ps)) )== 6) {
+  OTU_name = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+                   otu_tax$Genus,otu_tax$Row.names,sep = ".")
+  
+  
+  #替换两个括号
+  library("tidyverse")
+  OTU_name = str_replace(OTU_name,"[(]","")
+  OTU_name = str_replace(OTU_name,"[)]","")
+  # as.character(OTU_name )
+  # OTU_name = gsub("(","",OTU_name[311])
+  row.names(otu_tax) = OTU_name
+  
+  otu_table = otu_tax[2:(ncol(otu_table)+1)]
+  tax_table = otu_tax[(ncol(otu_table)+2):(ncol(otu_table)+2+5)]
+}
+if (length(colnames(tax_table(ps)) )== 7) {
+  OTU_name = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+                   otu_tax$Genus,otu_tax$Species,otu_tax$Row.names,sep = ".")
+  
+  
+  #替换两个括号
+  library("tidyverse")
+  OTU_name = str_replace(OTU_name,"[(]","")
+  OTU_name = str_replace(OTU_name,"[)]","")
+  # as.character(OTU_name )
+  # OTU_name = gsub("(","",OTU_name[311])
+  row.names(otu_tax) = OTU_name
+  
+  otu_table = otu_tax[2:(ncol(otu_table)+1)]
+  tax_table = otu_tax[(ncol(otu_table)+2):(ncol(otu_table)+2+6)]
+}
+
+# head(tax_table)
+graphlan_g = data.frame(xx = OTU_name)
+
+taxtree = paste(".","/","gerphlan_tax.txt",sep = "")
+write.table(graphlan_g,taxtree,quote = F,row.names = F,col.names = F)
+
+##出图
+# graphlan_annotate.py gerphlan_tax.txt annot1.xml --annot annot1.txt
+# graphlan.py annot1.xml tax1.png --dpi 150
+
+
+```
+### 做一些准备工作
+构建ps对象，分组求和
+
+
+```{r cars11, message=FALSE, warning=FALSE}
+
+
+ps_G_graphlan = phyloseq(otu_table(as.matrix(otu_table),taxa_are_rows = TRUE), 
+                         sample_data(mapping), 
+                         tax_table(as.matrix(tax_table)))
+ps_G_graphlan 
+ps3 = ps_G_graphlan 
+mapping = as.data.frame(sample_data(ps3))
+
+OTU = as.data.frame(t(vegan_otu(ps3)))
+##导入tax文件
+tax = as.data.frame(vegan_tax(ps3))
+head(tax)
+
+tax = as.matrix(tax)
+
+tax[is.na(tax)] <- "unclasscify"
+tax = as.data.frame(tax)
+### 提取mapping文件
+design = as.data.frame(sample_data(ps3))
+
+
+
+
+OTU = as.matrix(OTU)
+norm = t(t(OTU)/colSums(OTU,na=T)) #* 100 # normalization to total 100
+norm1 = norm %>% 
+  t() %>% as.data.frame()
+#数据分组计算平均值
+iris.split <- split(norm1,as.factor(design$SampleType))
+
+iris.apply <- lapply(iris.split,function(x)colSums(x,na.rm = T))
+# 组合结果
+norm2 <- do.call(rbind,iris.apply)%>% 
+  t() 
+head(norm2)
+
+OTU_all= cbind(as.data.frame(row.names(norm)),norm2)
+head(OTU_all)
+#样品丰度排序映射颜色
+if (length(colnames(tax_table(ps)) )== 6) {
+  colnames(tax) =c("kingdom","phylum","class","order","family","genus")
+}
+if (length(colnames(tax_table(ps)) )== 7) {
+  colnames(tax) =c("kingdom","phylum","class","order","family","genus","Species")
+}
+
+
+
+
+index = merge(OTU_all,tax, by="row.names",all=F)
+head(index)
+row.names(index) = index$Row.names
+index$Row.names = NULL
+
+
+### 这里准备按照样品设置映射
+
+### 两组丰度大小映射形状
+out = index
+if (length(levels(design$SampleType)) == 2) {
+  ##组比对映射形状
+  HH = c(rep("A",nrow(out)))
+  LL = c(rep("A",nrow(out)))
+  for(i in 1:nrow(out)){
+    if(out[i,levels(design$SampleType)[1]] > out[i,levels(design$SampleType)[2]]){
+      HH[i] <-"v"
+      LL[i] <-" "
+    }else if(out[i,levels(design$SampleType)[1]] == out[i,levels(design$SampleType)[2]]){
+      HH[i] <-" "
+      LL[i] <-" "
+    }else if(out[i,levels(design$SampleType)[1]] < out[i,levels(design$SampleType)[2]]){
+      HH[i] <-" "
+      LL[i] <-"^"
+    }
+    
+  }
+  
+  out2 = cbind(out,HH,LL)
+  
+}
+
+
+if (length(levels(design$SampleType)) != 2) {
+  out2 = out
+}
+
+# 
+OTU_TAX_all =  out2
+head(OTU_TAX_all)
+dim(OTU_TAX_all)
+row.names(OTU_TAX_all) = OTU_TAX_all$`row.names(norm)`
+OTU_TAX_all$`row.names(norm)` = NULL
+```
+### 构建进化树修饰文件
+
+```{r cars, message=FALSE, warning=FALSE}
+
+# 叶节点大小
+size_pi = 20
+#叶节点阴影透明度
+alp_pi = 0.1
+#注释角度
+ang_pi = 90
+
+
+# 物种注释图例设置
+## 这里设置物种注释我需要进行精密的计算和自动化运行。
+phylum.sum = tapply(taxa_sums(ps3), tax_table(ps3)[, "Phylum"], sum, na.rm=TRUE)
+top10phyla = names(sort(phylum.sum, TRUE))[1:10]
+# GP1 = prune_taxa((tax_table(ps3)[, "Phylum"] %in% top10phyla), ps3)
+color = c("#B0171F","#D15FEE","#FF7F00","#00CD00","#87CEFA","#FEC80A","#EE6A50","#7B68EE","#9ACD32","#8DEEEE","#006400")
+shape = c("*","o","2","d",".","4","s","p","H","+","D")
+# 
+# ##构建进化树节点属性注释文件
+# head(OTU_TAX_all)
+pcol = c(rep("A",nrow(OTU_TAX_all)))
+psha = c(rep("A",nrow(OTU_TAX_all)))
+
+
+for(i in 1:nrow(OTU_TAX_all)){
+  if(OTU_TAX_all[i,"phylum"] == top10phyla[1]){
+    pcol[i] <-color[1]
+    psha[i] <-shape[1]
+  }else if(OTU_TAX_all[i,"phylum"] == top10phyla[2]){
+    pcol[i] <-color[2]
+    psha[i] <-shape[2]
+  }else if(OTU_TAX_all[i,"phylum"] == top10phyla[3]){
+    pcol[i] <-color[3]
+    psha[i] <-shape[3]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[4]){
+    pcol[i] <-color[4]
+    psha[i] <-shape[4]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[5]){
+    pcol[i] <-color[5]
+    psha[i] <-shape[5]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[6]){
+    pcol[i] <-color[6]
+    psha[i] <-shape[6]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[7]){
+    pcol[i] <-color[7]
+    psha[i] <-shape[7]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[8]){
+    pcol[i] <-color[8]
+    psha[i] <-shape[8]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[9]){
+    pcol[i] <-color[9]
+    psha[i] <-shape[9]
+  }else if(OTU_TAX_all[i,"phylum"] ==  top10phyla[10]){
+    pcol[i] <-color[10]
+    psha[i] <-shape[10]
+  }else {
+    pcol[i] <-color[11]
+    psha[i] <-shape[11]
+  }
+}
+ano4 = cbind(row.names(OTU_TAX_all),pcol,psha)
+head(ano4)
+ano4 = as.data.frame(ano4)
+
+#节点颜色映射
+ste1 = data.frame(a = ano4$V1,b = c(rep("clade_marker_color",nrow(OTU_TAX_all))),c = ano4$pcol)
+head(ste1)
+#节点形状映射
+ste2 = data.frame(a = ano4$V1,b = c(rep("clade_marker_shape",nrow(OTU_TAX_all))),c = ano4$psha)
+head(ste2)
+##节点阴影映射
+ste3 = data.frame(a = ano4$V1,b = c(rep("annotation_background_color",nrow(OTU_TAX_all))),c = ano4$pcol)
+head(ste3)
+#注释透明度
+ste4 = data.frame(a = ano4$V1,b = c(rep("annotation_background_alpha",nrow(OTU_TAX_all))),c = c(rep(alp_pi,nrow(OTU_TAX_all))))
+head(ste4)
+ste4$c = as.factor(ste4$c)
+##节点大小
+ste5 = data.frame(a = ano4$V1,b = c(rep("clade_marker_size",nrow(OTU_TAX_all))),c = c(rep(size_pi,nrow(OTU_TAX_all))))
+head(ste5)
+ste5$c = as.factor(ste5$c)
+
+
+OTU_na_bra = paste(tax_table$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,sep = ".")
+#替换两个括号
+library("tidyverse")
+OTU_na_bra = str_replace(OTU_na_bra,"[(]","")
+OTU_na_bra = str_replace(OTU_na_bra,"[)]","")
+
+##第五级分支的宽度大小
+ste9 = data.frame(a = OTU_na_bra,b = c(rep("branch_thickness",length( OTU_na_bra))),c = c(rep("5",length( OTU_na_bra))))
+head(ste9)
+ste9$c = as.factor(ste9$c)
+
+### 设置第五级分支对的粗细更粗一些
+ste_all = rbind(ste1,ste2,ste3,ste4,ste5,ste9)
+head(ste_all)
+# 保存统计结果
+write.table(ste_all, "./phyloseq_pipline_5_tax_tree//annon2.txt", append = T, quote = F, sep="\t", eol = "\n", na = "NA", dec = ".", row.names = F, col.names = F)
+
+##出图
+# graphlan_annotate.py gerphlan_tax.txt annot1.xml --annot annot1.txt
+# graphlan_annotate.py annot1.xml annot2.xml --annot annot2.txt
+# graphlan.py annot1.xml tax2.png --dpi 150
+
+```
+### 构建外环及其修饰文件
+
+确定外环内容，指定外环编号
+```{r carsyi, message=FALSE, warning=FALSE}
+
+##构建平均丰度标志映射文件 平均丰度文件在样品环外的两个环
+# anno2 = data.frame(OTU_TAX_all$LL,OTU_TAX_all$HH,row.names = row.names(OTU_TAX_all))
+# colnames(anno2 ) = c(1,2)
+# anno2$id = row.names(anno2)
+# library("reshape2")
+# anno22 = melt(anno2,id.vars = "id",variable.name = "ring",value.name = "shape")
+# anno22$ringshape = c(rep("ring_shape",nrow(anno22)))
+# anno22 = select(anno22,id,ringshape,everything())
+# anno222<- anno22[anno22$shape%in%c("^","v"),]
+# head(anno222)
+# dim(anno222)
+
+
+ring_num = length(unique(design$SampleType))
+
+
+##添加物种丰度总体特征 物种总体特征为最外面一环
+norm = as.data.frame(norm)
+norm$mean=apply(norm,1,mean)
+head(norm)
+
+norm$mean = sqrt(norm$mean)
+norm$mean = norm$mean*2
+ste6 = data.frame(a = ano4$V1,b = c(rep("ring_height",nrow(OTU_TAX_all))),c = c(rep(ring_num +2,nrow(OTU_TAX_all))),d = norm$mean)
+head(ste6)
+ste6$c = as.factor(ste6$c)
+
+head(ste6)
+# colnames(ste6) = colnames(anno222)
+# ann_all3 = rbind(anno222,ste6)
+# head(ann_all3)
+## 添加每个样品物种高等度，中等丰度，中等偏下丰度，地丰度透明度标识
+### 首先我们将每个样品的丰度信息进行排序并映射响应的颜色
+##设定颜色梯度
+### 添加平均丰度的透明度，为最后一环
+norm = as.data.frame(norm)
+norm$mean=apply(norm,1,mean)
+head(norm)
+alpha_mean <- rep(0,nrow(norm))
+for (i in 1:nrow(norm)) {
+  if (norm$mean[i] > 0.01 & norm$mean[i] <= 1) {
+    alpha_mean[i] <-  1
+  }
+  if (norm$mean[i] > 0.001 & norm$mean[i] <= 0.01) {
+    alpha_mean[i] = 0.5
+  }
+  
+  if (norm$mean[i] > 0.0001 & norm$mean[i] <= 0.001) {
+    alpha_mean[i] = 0.5
+  }
+  if ( norm$mean[i] <= 0.0001) {
+    alpha_mean[i] = 0
+  }
+  
+}
+ste7 = data.frame(a = ano4$V1,b = c(rep("ring_alpha",nrow(OTU_TAX_all))),c = c(rep(ring_num +2,nrow(OTU_TAX_all))),d = alpha_mean)
+head(ste7)
+ste7$c = as.factor(ste7$c)
+# colnames(ste7) = colnames(anno222)
+
+ann_all6 = rbind(ste6,ste7)
+head(ann_all6)
+
+
+# ### 添加随机森林注释结果，添加到平均丰度标记外的一环
+ps
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+otutab = as.data.frame(t(vegan_otu(ps)))
+dim(otutab)
+
+mapping7 = as.data.frame(sample_data(ps))
+
+# install.packages("randomForest")
+library(randomForest)
+
+# otutab need transposition for randomForest function
+otutab_t = as.data.frame(t(otutab))
+
+str(otutab_t)
+
+# Set classification info.
+otutab_t$group = factor(mapping7$SampleType,levels= unique(mapping7$SampleType))
+colnames(otutab_t) = paste("OTU",colnames(otutab_t),sep = "")
+# set random seed for reproducible
+set.seed(315)
+
+# RandomForest Classification
+otutab_t.rf= randomForest(OTUgroup ~ ., data=otutab_t, importance=TRUE, proximity=TRUE)
+
+print(otutab_t.rf)
+#######使用随机森林做分类########
+
+
+###提取分类变量使用MeanDecreaseAccuracy作为重要性指标选择变量#######
+a=round(importance(otutab_t.rf), 2)
+
+library(dplyr)
+# str(a)
+a=as.data.frame(a)
+a$id=row.names(a)
+a2<- dplyr::arrange(a, desc(MeanDecreaseAccuracy))
+# head(a2)
+row.names(a2)=a2$id
+a2$MeanDecreaseAccuracy = a2$MeanDecreaseAccuracy + abs(min(a2$MeanDecreaseAccuracy ))
+
+norm_imp = a2$MeanDecreaseAccuracy/sum(a2$MeanDecreaseAccuracy)
+
+a2$id = gsub("OTU","",a2$id)
+norm_imp = norm_imp *1/max(norm_imp )
+##设置环重要性颜色和
+ste8 = data.frame(a = a2$id,b = c(rep("ring_alpha",nrow(OTU_TAX_all))),c = c(rep(ring_num +1,nrow(OTU_TAX_all))),d = norm_imp)
+head(ste8)
+ste8$c = as.factor(ste8$c)
+colnames(ste8) = colnames(ann_all6)
+
+
+
+
+##设置环重要性颜色和
+ste9 = data.frame(a = a2$id,b = c(rep("ring_color",nrow(OTU_TAX_all))),c = c(rep(ring_num +1,nrow(OTU_TAX_all))),d = c(rep("#FF2400",nrow(OTU_TAX_all))))
+head(ste9)
+ste9$c = as.factor(ste9$c)
+colnames(ste9) = colnames(ann_all6)
+
+
+##每个分组平均丰度颜色映射
+colorg = colorRampPalette(c( "#E41A1C", "#984EA3","#4DAF4A"))(length(unique(mapping$SampleType)))
+library("scales")
+# colorg = colorRampPalette(c( "black"))(12)
+library("scales")
+show_col(colorg)
+samp_num = dim(norm2)[2]
+# colnames(norm2)
+c = data.frame(id = c(1:samp_num),col = colorg)
+a = norm2[,1:samp_num]
+head(a)
+a = as.data.frame(a)
+##得到排序特征
+for(i in 1:nrow(a)){
+  a[i,1:samp_num] = match(colnames(a[i,1:samp_num]), colnames(sort(a[i,1:samp_num])))
+}
+##填充颜色
+for(i in 1:nrow(a)){
+  aa = a[i,]
+  aa = as.data.frame(aa)
+  colnames(aa) = aa[1,]
+  ccc =t(c[colnames(aa),]) 
+  a[i,] = ccc[2,]
+}
+head(a)
+
+colnames(a ) = c(1:length(unique(design$SampleType)))
+a$id = row.names(a)
+library("reshape2")
+library("dplyr")
+anno11 = melt(a,id.vars = "id",variable.name = "ring",value.name = "color")
+anno11$ringcolor = c(rep("ring_color",nrow(anno11)))
+anno11 = select(anno11,id,ringcolor,everything())
+head(anno11)
+dim(anno11)
+colnames(anno11) = c("a","b","c","d")
+
+
+
+
+
+
+
+
+
+ann_all7 = rbind(ann_all6,ste8,ste9,anno11)
+head(ann_all7)
+
+
+
+
+
+
+
+
+write.table(ann_all7, "./phyloseq_pipline_5_tax_tree//annon3.txt", append = T, quote = F, sep="\t", eol = "\n", na = "NA", dec = ".", row.names = F, col.names = F)
+
+##出图
+# graphlan_annotate.py gerphlan_tax.txt annot1.xml --annot annot1.txt
+# graphlan_annotate.py annot1.xml annot2.xml --annot annon2.txt
+# graphlan_annotate.py annot2.xml annot3.xml --annot annon3.txt
+# graphlan.py annot3.xml tax3.png --dpi 150
+```
+### 常用总环修饰指标
+```{r cars3443, message=FALSE, warning=FALSE}
+
+#设置题目
+til = "16S rep set tree"
+#设置总体注释透明度
+alp_all = "0.03"
+
+#annot1
+annot1_1 = data.frame(a = c("title",
+                            "clade_marker_size",
+                            "title_font_size",
+                            "start_rotation",
+                            "total_plotted_degrees",
+                            "class_legend_font_size",
+                            "annotation_background_width",
+                            "annotation_background_alpha",
+                            "annotation_font_size",
+                            "annotation_legend_font_size",
+                            "branch_thickness",
+                            "clade_marker_edge_width",
+                            "clade_marker_size",
+                            "clade_separation",
+                            "annotation_background_separation",
+                            "annotation_background_offset"
+                            
+                            
+),
+b = c(
+  til,
+  "0.1",
+  "12",
+  "360",
+  "340",
+  "9",
+  "0.03",
+  "0.03",
+  "3",
+  "9",
+  "2",
+  "1",
+  "15",
+  "0.2",
+  "-0.001",
+  "-0.001"
+)
+
+
+)
+
+write.table(annot1_1, "./phyloseq_pipline_5_tax_tree//annot0.txt", append = T, quote = F, sep="\t", eol = "\n", na = "NA", dec = ".", row.names = F, col.names = F)
+
+
+```
+
+
+
+### 总环修饰参数2需要修改的
+```{r cars8798, message=FALSE, warning=FALSE}
+
+## 环间隔厚度
+annot1_2 = data.frame(a = rep("ring_internal_separator_thickness",4) ,
+                      b = c(1:4),
+                      c = c(0.2,0.2,0.2,1))
+
+
+# 环间隔颜色
+annot1_3 = data.frame(a = rep("ring_separator_color",(ring_num+2)) ,
+                      b = c(1:(ring_num+2)),
+                      c = rep("black",(ring_num+2)) 
+                      
+)             
+
+
+
+# 环间宽度和高度
+annot1_4 = data.frame(a = c(rep("ring_width",(ring_num+2)),rep("ring_height",(ring_num+2))) ,
+                      b = c(1:(ring_num+2),1:(ring_num+2)),
+                      c = c(rep(0.6,(ring_num+2)),rep(0.1,(ring_num+2)))
+)         
+
+
+### 这里根据门水平设置注释半径并进行注释信息，注意这里虽然编写注释同进化树相同
+
+annot1_5 = data.frame( a = c(rep(c(top10phyla,"other"),5)),
+                       b = c(rep("annotation_background_color",length(top10phyla)+1),
+                             rep("clade_marker_shape",length(top10phyla)+1),
+                             rep("annotation",length(top10phyla)+1),
+                             rep("clade_marker_size",length(top10phyla)+1),
+                             rep("clade_marker_color",length(top10phyla)+1)
+                             ),
+                       c = c(color,
+                             shape,
+                             c(top10phyla,"other"),
+                             rep("3", length(c(top10phyla,"other"))),
+                             color
+                       )
+                       
+)
+### 环标签设置
+
+annot1_6 = data.frame(a = c(rep("ring_label",(ring_num+2)),rep("ring_label_font_size",(ring_num+2))) ,
+                      b = c(rep(1:(ring_num+2),2)),
+                      c =  c(
+                             levels(design$SampleType),
+                             
+                             "randomforest","mean_abun",rep(5,(ring_num+2))))
+
+
+##这里设置每一级别的分类标签
+annot1_7 = data.frame(a = c("internal_label",
+                            "internal_label",
+                            "internal_label",
+                            "internal_label",
+                            "internal_label",
+                            "internal_label",
+                            "internal_label",
+                            "internal_label"
+)
+,
+b = c(1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+),
+c= c(
+  "king",
+  "Ph.",
+  "Classes",
+  "Orders",
+  "Families",
+  "Genera",
+  "Species",
+  "OTU"
+  
+)  
+
+
+)
+
+annot1_8 = data.frame( a = c(rep(c(paste(top10phyla,"_",sep = ""),"other"),5)),
+                       b = c(rep("annotation_background_color",length(top10phyla)+1),
+                             rep("clade_marker_shape",length(top10phyla)+1),
+                             rep("annotation",length(top10phyla)+1),
+                             rep("clade_marker_size",length(top10phyla)+1),
+                             rep("clade_marker_color",length(top10phyla)+1)
+                       ),
+                       c = c(color,
+                             shape,
+                             c(top10phyla,"other"),
+                             rep("30", length(c(top10phyla,"other"))),
+                             color
+                       )
+                       
+)
+
+
+annot1 = rbind(annot1_2,annot1_3,annot1_4,annot1_5,annot1_6,annot1_7,annot1_8)
+
+write.table(annot1, ".//phyloseq_pipline_5_tax_tree/annot1.txt", append = T, quote = F, sep="\t", eol = "\n", na = "NA", dec = ".", row.names = F, col.names = F)
+
+
+
+
+### 运行命令
+
+
+##出图
+# graphlan_annotate.py gerphlan_tax.txt annot1.xml --annot annot1.txt
+# graphlan_annotate.py annot1.xml annot2.xml --annot annon2.txt
+# graphlan_annotate.py annot2.xml annot3.xml --annot annon3.txt
+# graphlan_annotate.py annot3.xml annot0.xml --annot annot0.txt
+# graphlan.py annot0.xml tax_fal1.png --dpi 150
+```
+
+
+
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->
+
+<!-- ```{r cars, message=FALSE, warning=FALSE} -->
+
+<!-- ``` -->

@@ -1,0 +1,353 @@
+---
+title: "phyloseq_6_LefSe"
+author: "wentao"
+date: "2019年7月5日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## LefSe分析
+
+```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE}
+rm(list=ls())
+library("phyloseq")
+ps = readRDS("./a3_DADA2_table//ps.rds")
+ps
+ps = filter_taxa(ps, function(x) sum(x ) > 100 , TRUE)
+ps 
+
+library(tidyverse)
+
+# setwd("..")
+path = "./phyloseq_6_LefSe"
+dir.create(path)
+path = "./phyloseq_6_LefSe/OTU/"
+dir.create(path)
+
+ps0 <- ps
+ps_Genus = ps0
+
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+otu_table = as.data.frame(t(vegan_otu(ps_Genus)))
+
+vegan_tax <-  function(physeq){
+  tax <-  tax_table(physeq)
+  
+  return(as(tax,"matrix"))
+}
+tax_table = as.data.frame(vegan_tax(ps_Genus))
+
+design = as.data.frame(sample_data(ps))
+
+otu_tax = merge(otu_table,tax_table,by = "row.names",all = F)
+dim(otu_tax)
+if (length(colnames(tax_table(ps)) )== 6) {
+  OTU_name = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+                   otu_tax$Genus,otu_tax$Row.names,sep = "|")
+  
+  
+  #替换两个括号
+  library("tidyverse")
+  OTU_name = str_replace(OTU_name,"[(]","")
+  OTU_name = str_replace(OTU_name,"[)]","")
+  # as.character(OTU_name )
+  # OTU_name = gsub("(","",OTU_name[311])
+  row.names(otu_tax) = OTU_name
+  
+  otu_table = otu_tax[2:(ncol(otu_table)+1)]
+  tax_table = otu_tax[(ncol(otu_table)+2):(ncol(otu_table)+2+5)]
+}
+if (length(colnames(tax_table(ps)) )== 7) {
+  OTU_name = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+                   otu_tax$Genus,otu_tax$Species,otu_tax$Row.names,sep = "|")
+  
+  
+  #替换两个括号
+  library("tidyverse")
+  OTU_name = str_replace(OTU_name,"[(]","")
+  OTU_name = str_replace(OTU_name,"[)]","")
+  # as.character(OTU_name )
+  # OTU_name = gsub("(","",OTU_name[311])
+  row.names(otu_tax) = OTU_name
+  
+  otu_table = otu_tax[2:(ncol(otu_table)+1)]
+  tax_table = otu_tax[(ncol(otu_table)+2):(ncol(otu_table)+2+6)]
+}
+head(OTU_name)
+# OTU_name1 = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+#                 otu_tax$Genus,otu_tax$Species,OTU_ID,sep = ".")
+
+graphlan_g = data.frame(xx = OTU_name)
+
+# taxtree = paste(".","/","gerphlan_tax.txt",sep = "")
+# write.table(graphlan_g,taxtree,quote = F,row.names = F,col.names = F)
+
+ps_G_graphlan = phyloseq(otu_table(as.matrix(otu_table),taxa_are_rows = TRUE), 
+                         sample_data(design), 
+                         tax_table(as.matrix(tax_table)))
+ps_G_graphlan 
+
+
+ps_sub = ps_G_graphlan
+ps_sub = filter_taxa(ps_sub, function(x) sum(x ) > 1 , TRUE)
+ps_sub
+
+ps1_rela = ps_sub
+
+# ps1_rela  = transform_sample_counts(ps_sub, function(x) x / sum(x) );ps1_rela 
+# ps1_rela2 = filter_taxa(ps1_rela, function(x) mean(x) > 0.001, TRUE);ps1_rela2
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+
+otu_table = as.data.frame((vegan_otu(ps1_rela)))
+otu_table[otu_table==0] <- 1
+row.names(otu_table)
+design$ID
+
+
+design = as.data.frame(sample_data(ps1_rela))
+
+otu_table$ID = row.names(otu_table)
+otu_table$CLASS = design$SampleType
+library("tidyverse")
+otu_table = select(otu_table,CLASS,ID,everything())
+
+otu_table = t(otu_table)
+# head(otu_table)
+
+filename = paste(path,"/LEFSE_to_run_OTU_level.txt",sep = "")
+write.table(otu_table, filename,append = F, quote = F,col.names= F,sep = "\t")
+
+##············································可以开始运行LEfse了······················································
+# # # #文件预处理
+# format_input.py LEFSE_to_run_OTU_level.txt pri_lefse.in -c 1 -u 2 -o 1000000
+# 
+# # 注意这里 –c用来指定分组信息-u 1指定样品信息
+# #文件分析
+# ~/src/nsegata-lefse/run_lefse.py pri_lefse.in pri_lefse_2.res
+# #柱状图绘制
+# plot_res.py pri_lefse_2.res lefse_barplot.pdf --format pdf
+# #树状图绘制
+# plot_cladogram.py pri_lefse_2.res lefse_tree.pdf --format pdf
+# #做每个差异的柱状图
+# mkdir biomarkers_raw_images
+# plot_features.py pri_lefse.in pri_lefse_2.res biomarkers_raw_images/
+# #
+
+
+```
+### 基于属水平做lefse
+
+```{r wewew, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+rm(list=ls())
+library("phyloseq")
+ps = readRDS("./a3_DADA2_table//ps.rds")
+ps
+path = "./phyloseq_6_LefSe"
+dir.create(path)
+path = "./phyloseq_6_LefSe/G/"
+dir.create(path)
+
+taxGlomRank = "Genus"
+ps_Genus = tax_glom(ps, taxrank = taxGlomRank)
+ps_Genus 
+
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+otu_table = as.data.frame(t(vegan_otu(ps_Genus)))
+
+vegan_tax <-  function(physeq){
+  tax <-  tax_table(physeq)
+  
+  return(as(tax,"matrix"))
+}
+tax_table = as.data.frame(vegan_tax(ps_Genus))
+
+design = as.data.frame(sample_data(ps_Genus))
+
+
+# OTU_name = paste(tax_table$Kingdom,tax_table$Phylum,tax_table$Class,tax_table$Order,tax_table$Family,
+#                  tax_table$Genus,sep = ".")
+# head(OTU_name)
+# row.names(tax_table) = OTU_name
+
+head(tax_table)
+
+head(otu_table)
+
+otu_tax = merge(otu_table,tax_table,by = "row.names",all = F)
+dim(otu_tax)
+if (length(colnames(tax_table(ps)) )== 6) {
+  OTU_name = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+                   otu_tax$Genus,otu_tax$Row.names,sep = "|")
+  
+  
+  #替换两个括号
+  library("tidyverse")
+  OTU_name = str_replace(OTU_name,"[(]","")
+  OTU_name = str_replace(OTU_name,"[)]","")
+  # as.character(OTU_name )
+  # OTU_name = gsub("(","",OTU_name[311])
+  row.names(otu_tax) = OTU_name
+  
+  otu_table = otu_tax[2:(ncol(otu_table)+1)]
+  tax_table = otu_tax[(ncol(otu_table)+2):(ncol(otu_table)+2+5)]
+}
+if (length(colnames(tax_table(ps)) )== 7) {
+  OTU_name = paste(otu_tax$Kingdom,otu_tax$Phylum,otu_tax$Class,otu_tax$Order,otu_tax$Family,
+                   otu_tax$Genus,otu_tax$Species,otu_tax$Row.names,sep = "|")
+  
+  
+  #替换两个括号
+  library("tidyverse")
+  OTU_name = str_replace(OTU_name,"[(]","")
+  OTU_name = str_replace(OTU_name,"[)]","")
+  # as.character(OTU_name )
+  # OTU_name = gsub("(","",OTU_name[311])
+  row.names(otu_tax) = OTU_name
+  
+  otu_table = otu_tax[2:(ncol(otu_table)+1)]
+  tax_table = otu_tax[(ncol(otu_table)+2):(ncol(otu_table)+2+6)]
+}
+# head(tax_table)
+graphlan_g = data.frame(xx = OTU_name)
+
+ps_G_graphlan = phyloseq(otu_table(as.matrix(otu_table),taxa_are_rows = TRUE), 
+                         sample_data(design), 
+                         tax_table(as.matrix(tax_table)))
+ps_G_graphlan 
+
+
+ps_sub = ps_G_graphlan 
+
+ps_sub
+
+ps1_rela = ps_sub
+
+# ps1_rela  = transform_sample_counts(ps_sub, function(x) x / sum(x) );ps1_rela 
+# ps1_rela2 = filter_taxa(ps1_rela, function(x) mean(x) > 0.001, TRUE);ps1_rela2
+
+vegan_otu <-  function(physeq){
+  OTU <-  otu_table(physeq)
+  if(taxa_are_rows(OTU)){
+    OTU <-  t(OTU)
+  }
+  return(as(OTU,"matrix"))
+}
+
+otu_table = as.data.frame((vegan_otu(ps1_rela)))
+otu_table[otu_table==0] <- 1
+row.names(otu_table)
+design$ID
+
+
+design = as.data.frame(sample_data(ps1_rela))
+otu_table$CLASS = design$SampleType
+otu_table$ID = row.names(otu_table)
+
+library("tidyverse")
+otu_table = select(otu_table,CLASS,ID,everything())
+
+otu_table = t(otu_table)
+head(otu_table)
+filename = paste(path,"/LEFSE_to_run_G_level.txt",sep = "")
+write.table(otu_table,filename,append = F, quote = F,col.names= F,sep = "\t")
+
+
+#文件预处理
+# format_input.py LEFSE_to_run_G_level.txt pri_lefse.in -c 1 -u 2 -o 1000000
+# # 注意这里 –c用来指定分组信息-u 1指定样品信息
+# #文件分析
+# ~/src/nsegata-lefse/run_lefse.py pri_lefse.in pri_lefse_2.res
+# #柱状图绘制
+# plot_res.py pri_lefse_2.res lefse_barplot.pdf --format pdf
+# #树状图绘制
+# plot_cladogram.py pri_lefse_2.res lefse_tree.pdf --format pdf
+# #做每个差异的柱状图
+# mkdir biomarkers_raw_images
+## plot_features.py pri_lefse.in pri_lefse_2.res biomarkers_raw_images/
+```
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r 111, message=FALSE, warning=FALSE, paged.print=FALSE} -->
+
+<!-- ``` -->
