@@ -1,0 +1,140 @@
+---
+title: "ggplot版本词云"
+author: "wentao"
+date: "2020/2/7"
+output: html_document
+---
+
+```{css}
+ pre code,pre,code {
+ white-space:pre!important;
+ overflow-x: scroll!important; 
+} 
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.width = 7,
+                      fig.height = 5,
+                      fig.align = "center",
+                      warning = FALSE,
+                      message = FALSE
+                      
+                      )
+```
+
+# R语言的1000种爱你的方式
+
+- ggplot版本的词云:ggwordcloud
+
+## 写在前面
+词云作为一种比较时髦的可视化方式，为我们文字方向的工作提供了易于表达的可视化方案，一目了然有大方美观。
+本次我为大家带来gplot版本的词云，并且用爱你的形状做展示。
+
+我们使用的数据ggwordcloud内置的数据集，这数据集手机了全世界爱你的语言，我们来将其绘制成图云，连图云都是爱你的形状。
+
+
+安装R包
+```{R}
+
+# 安装
+# devtools::install_github("lepennec/ggwordcloud")
+
+```
+
+示例数据提取，基本词云展示：基本词云使用的是ggwordcloud包中定义的涂图层函数geom_text_wordcloud()
+
+```{R}
+
+library(ggwordcloud)
+#> Loading required package: ggplot2
+
+
+data("love_words_small")
+
+head(love_words_small)
+
+
+set.seed(42)
+ggplot(love_words_small, aes(label = word, size = speakers)) +
+  geom_text_wordcloud() +
+  scale_size_area(max_size = 40) +
+  theme_minimal()
+```
+### 爱你的形状如何制作呢？
+
+因为我们设置了一张图片png::readPNG(system.file("extdata/hearth.png",package = "ggwordcloud", mustWork = TRUE))。这张
+图片是爱你的形状，读入图片，产生效果.我们可以设置不同的形状，根据不同的形状。
+
+```{R}
+
+data("love_words")
+head(love_words)
+
+
+set.seed(42)
+ggplot( love_words,aes(label = word, size = speakers,color = speakers)) +
+  geom_text_wordcloud_area(aes(angle = 45 * sample(-2:2, nrow(love_words),
+     replace = TRUE,prob = c(1, 1, 4, 1, 1))),
+  mask = png::readPNG(system.file("extdata/hearth.png",
+                                  package = "ggwordcloud", mustWork = TRUE
+  )),
+  rm_outside = TRUE
+  ) +
+  scale_size_area(max_size = 40) +
+  theme_minimal() +
+  scale_color_gradient(low = "darkred", high = "red")
+#> Some words could not fit on page. They have been removed.
+
+
+```
+
+急既然使用的ggplot出图，那就可以使用分面，更加强大组件词云比较
+
+```{R}
+
+library(dplyr, quietly = TRUE, warn.conflicts = FALSE)
+library(tidyr, quietly = TRUE)
+set.seed(42)
+ggplot(
+  love_words_small %>%
+    gather(key = "type", value = "speakers", -lang, -word) %>%
+    arrange(desc(speakers)),
+  aes(label = word, size = speakers)
+) +
+  geom_text_wordcloud_area(mask = png::readPNG(system.file("extdata/hearth.png",
+                                  package = "ggwordcloud", mustWork = TRUE
+  ))) +
+  scale_size_area(max_size = 40) +
+  theme_minimal() +
+  facet_wrap(~type)
+```
+
+词云如果统计数量的话可以添加label_contentc参数
+
+```{R}
+
+set.seed(42)
+ggplot(love_words_small, aes(label = word, size = speakers,
+                             label_content = sprintf("%s<span style='font-size:7.5pt'>(%g)</span>", word, speakers))) +
+  geom_text_wordcloud_area(mask = png::readPNG(system.file("extdata/hearth.png",
+                                  package = "ggwordcloud", mustWork = TRUE
+  ))) +
+  scale_size_area(max_size = 40) +
+  theme_minimal()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
